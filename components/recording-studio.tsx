@@ -18,6 +18,25 @@ export function RecordingStudio({
   const [error, setError] = useState("");
   const [recordingTime, setRecordingTime] = useState(0);
   const [enhancementSource, setEnhancementSource] = useState<"ghost" | "simulated">("simulated");
+  const [enhancementDetails, setEnhancementDetails] = useState<{
+    templateUsed: string;
+    emotionFrom: string;
+    emotionTo: string;
+    secondaryEmotionTo: string;
+    curveFrom: string;
+    curveTo: string;
+    curveChanged: boolean;
+    autoTemplateConfidence: string;
+  }>({
+    templateUsed: "",
+    emotionFrom: "",
+    emotionTo: "",
+    secondaryEmotionTo: "",
+    curveFrom: "",
+    curveTo: "",
+    curveChanged: false,
+    autoTemplateConfidence: "",
+  });
   const timerRef = useRef<NodeJS.Timeout | null>(null);
 
   const defaultDeltas = {
@@ -99,6 +118,16 @@ export function RecordingStudio({
     setEnhancedAudio(null);
     setIntelligenceDeltas(defaultDeltas);
     setEnhancementSource("simulated");
+    setEnhancementDetails({
+      templateUsed: "",
+      emotionFrom: "",
+      emotionTo: "",
+      secondaryEmotionTo: "",
+      curveFrom: "",
+      curveTo: "",
+      curveChanged: false,
+      autoTemplateConfidence: "",
+    });
     setRecordingTime(0);
     if (audioRef.current) audioRef.current.src = "";
     setError("");
@@ -142,6 +171,19 @@ export function RecordingStudio({
       const emphasisDetection =
         enhanceRes.headers.get("X-Ghost-Emphasis-Detection") ?? defaultDeltas.emphasisDetection;
       const source = enhanceRes.headers.get("X-Ghost-Source") === "ghost" ? "ghost" : "simulated";
+      const templateUsed = enhanceRes.headers.get("X-Ghost-Template-Used") ?? "";
+      const emotionFrom = enhanceRes.headers.get("X-Ghost-Emotion-From") ?? "";
+      const emotionTo = enhanceRes.headers.get("X-Ghost-Emotion-To") ?? "";
+      const secondaryEmotionTo = enhanceRes.headers.get("X-Ghost-Secondary-Emotion-To") ?? "";
+      const curveFrom = enhanceRes.headers.get("X-Ghost-Curve-From") ?? "";
+      const curveTo = enhanceRes.headers.get("X-Ghost-Curve-To") ?? "";
+      const curveChanged = (enhanceRes.headers.get("X-Ghost-Curve-Changed") ?? "false") === "true";
+      const confidenceRaw = enhanceRes.headers.get("X-Ghost-Auto-Template-Confidence") ?? "";
+      const confidenceNum = Number(confidenceRaw);
+      const autoTemplateConfidence =
+        Number.isFinite(confidenceNum) && confidenceNum >= 0
+          ? `${Math.round(confidenceNum * 100)}%`
+          : "";
 
       setIntelligenceDeltas({
         prosody,
@@ -150,6 +192,16 @@ export function RecordingStudio({
         emphasisDetection,
       });
       setEnhancementSource(source);
+      setEnhancementDetails({
+        templateUsed,
+        emotionFrom,
+        emotionTo,
+        secondaryEmotionTo,
+        curveFrom,
+        curveTo,
+        curveChanged,
+        autoTemplateConfidence,
+      });
 
       const enhanced = await enhanceRes.arrayBuffer();
       const enhancedUrl = URL.createObjectURL(new Blob([enhanced], { type: "audio/wav" }));
@@ -351,6 +403,30 @@ export function RecordingStudio({
           <p className="mt-4 text-xs leading-6 text-slate-400">
             Uplift values are computed per recording. With a configured Ghost backend, values come from model output telemetry; otherwise they fall back to local simulated analysis for demo continuity.
           </p>
+          {enhancementSource === "ghost" && (
+            <div className="mt-4 grid gap-2 text-xs text-slate-300 sm:grid-cols-2">
+              {(enhancementDetails.templateUsed || enhancementDetails.autoTemplateConfidence) && (
+                <div className="rounded-lg border border-white/10 bg-white/[0.02] px-3 py-2">
+                  Template: {enhancementDetails.templateUsed || "auto"}
+                  {enhancementDetails.autoTemplateConfidence
+                    ? ` (${enhancementDetails.autoTemplateConfidence} confidence)`
+                    : ""}
+                </div>
+              )}
+              {(enhancementDetails.emotionFrom || enhancementDetails.emotionTo) && (
+                <div className="rounded-lg border border-white/10 bg-white/[0.02] px-3 py-2">
+                  Emotion: {enhancementDetails.emotionFrom || "base"} → {enhancementDetails.emotionTo || "target"}
+                  {enhancementDetails.secondaryEmotionTo ? ` + ${enhancementDetails.secondaryEmotionTo}` : ""}
+                </div>
+              )}
+              {(enhancementDetails.curveFrom || enhancementDetails.curveTo || enhancementDetails.curveChanged) && (
+                <div className="rounded-lg border border-white/10 bg-white/[0.02] px-3 py-2 sm:col-span-2">
+                  Curve: {enhancementDetails.curveFrom || "current"} → {enhancementDetails.curveTo || "adaptive"}
+                  {enhancementDetails.curveChanged ? " (changed)" : " (stable)"}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       )}
 

@@ -22,6 +22,18 @@ type EnhancementResult = {
   audio: Uint8Array;
   deltas: IntelligenceDeltas;
   source: "ghost" | "simulated";
+  details: EnhancementDetails;
+};
+
+type EnhancementDetails = {
+  templateUsed: string | null;
+  emotionFrom: string | null;
+  emotionTo: string | null;
+  secondaryEmotionTo: string | null;
+  curveFrom: string | null;
+  curveTo: string | null;
+  curveChanged: boolean;
+  autoTemplateConfidence: number | null;
 };
 
 export async function POST(req: NextRequest) {
@@ -38,7 +50,7 @@ export async function POST(req: NextRequest) {
 
     const remoteResult = await tryGhostEnhancement(audioFile, wavBytes);
     const result = remoteResult ?? enhanceAudioBuffer(wavBytes);
-    const { audio, deltas, source } = result;
+    const { audio, deltas, source, details } = result;
 
     return new NextResponse(Buffer.from(audio), {
       status: 200,
@@ -50,6 +62,15 @@ export async function POST(req: NextRequest) {
         "X-Ghost-Natural-Pacing": deltas.naturalPacing,
         "X-Ghost-Emphasis-Detection": deltas.emphasisDetection,
         "X-Ghost-Source": source,
+        "X-Ghost-Template-Used": details.templateUsed ?? "",
+        "X-Ghost-Emotion-From": details.emotionFrom ?? "",
+        "X-Ghost-Emotion-To": details.emotionTo ?? "",
+        "X-Ghost-Secondary-Emotion-To": details.secondaryEmotionTo ?? "",
+        "X-Ghost-Curve-From": details.curveFrom ?? "",
+        "X-Ghost-Curve-To": details.curveTo ?? "",
+        "X-Ghost-Curve-Changed": String(details.curveChanged),
+        "X-Ghost-Auto-Template-Confidence":
+          details.autoTemplateConfidence === null ? "" : String(details.autoTemplateConfidence),
       },
     });
   } catch (error) {
@@ -98,16 +119,19 @@ async function tryGhostEnhancement(audioFile: File, wavData: Uint8Array): Promis
       }
 
       const audio = new Uint8Array(Buffer.from(audioBase64, "base64"));
-      const deltas = parseDeltas(payload?.deltas, response.headers);
+      const deltasRaw = typeof payload?.deltas === "object" && payload?.deltas !== null ? payload.deltas : null;
+      const deltas = parseDeltas(deltasRaw, response.headers);
+      const details = parseDetails(deltasRaw, response.headers);
 
-      return { audio, deltas, source: "ghost" };
+      return { audio, deltas, source: "ghost", details };
     }
 
     // Binary contract option: raw WAV body + optional X-Ghost-* headers
     const audio = new Uint8Array(await response.arrayBuffer());
     const deltas = parseDeltas(null, response.headers);
+    const details = parseDetails(null, response.headers);
 
-    return { audio, deltas, source: "ghost" };
+    return { audio, deltas, source: "ghost", details };
   } catch (error) {
     console.error("Ghost backend request failed. Falling back to simulated enhancement.", error);
     return null;
@@ -117,32 +141,118 @@ async function tryGhostEnhancement(audioFile: File, wavData: Uint8Array): Promis
 function parseDeltas(raw: unknown, headers: Headers): IntelligenceDeltas {
   const fromObject = typeof raw === "object" && raw !== null ? (raw as Record<string, unknown>) : {};
 
-  const emotionalClarityRaw = pickFirst(fromObject, ["emotionalClarity", "emotional_clarity"]);
-  const naturalPacingRaw = pickFirst(fromObject, ["naturalPacing", "natural_pacing"]);
-  const emphasisDetectionRaw = pickFirst(fromObject, ["emphasisDetection", "emphasis_detection"]);
+  const speedDelta = parseFloatValue(pickFirst(fromObject, ["speed_delta", "speedDelta"]), 0);
+  const pitchDelta = parseFloatValue(pickFirst(fromObject, ["pitch_delta", "pitchDelta"]), 0);
+  const intensityDelta = parseFloatValue(pickFirst(fromObject, ["intensity_delta", "intensityDelta"]), 0);
+  const blendDelta = parseFloatValue(pickFirst(fromObject, ["blend_delta", "blendDelta"]), 0);
+  const confidence = clampFloat(
+    parseFloatValue(pickFirst(fromObject, ["auto_template_confidence", "autoTemplateConfidence"]), 0.5),
+    0,
+    1
+  );
+  const curveChanged = parseBoolValue(pickFirst(fromObject, ["curve_changed", "curveChanged"]), false);
+  const emotionFrom = parseText(pickFirst(fromObject, ["emotion_from", "emotionFrom"]));
+  const emotionTo = parseText(pickFirst(fromObject, ["emotion_to", "emotionTo"]));
+  const secondaryEmotionTo = parseText(
+    pickFirst(fromObject, ["secondary_emotion_to", "secondaryEmotionTo"])
+  );
+
+  const derivedProsody = clampInt(
+    Math.round(
+      Math.abs(speedDelta) * 125 +
+        Math.abs(pitchDelta) * 140 +
+        Math.abs(intensityDelta) * 170 +
+        Math.abs(blendDelta) * 90 +
+        confidence * 18 +
+        (curveChanged ? 9 : 0)
+    ),
+    28,
+    96
+  );
+
+  const derivedEmotionalClarity = clampInt(
+    Math.round(
+      Math.abs(intensityDelta) * 210 +
+        Math.abs(blendDelta) * 80 +
+        (emotionFrom && emotionTo && emotionFrom !== emotionTo ? 18 : 0) +
+        (secondaryEmotionTo ? 8 : 0) +
+        confidence * 20
+    ),
+    30,
+    98
+  );
+
+  const derivedNaturalPacing =
+    Math.abs(speedDelta) >= 0.05 || curveChanged || confidence >= 0.55 ? "optimized" : "adjusting";
+  const derivedEmphasis =
+    Math.abs(pitchDelta) >= 0.05 || curveChanged || Math.abs(intensityDelta) >= 0.12 ? "active" : "warming";
 
   return {
     prosody: clampInt(
-      parsePercent(fromObject.prosody, parsePercent(headers.get("X-Ghost-Prosody"), 42)),
+      parsePercent(
+        pickFirst(fromObject, ["prosody", "prosody_delta"]),
+        parsePercent(headers.get("X-Ghost-Prosody"), derivedProsody)
+      ),
       10,
       100
     ),
     emotionalClarity: clampInt(
       parsePercent(
-        emotionalClarityRaw,
-        parsePercent(headers.get("X-Ghost-Emotional-Clarity"), 67)
+        pickFirst(fromObject, ["emotionalClarity", "emotional_clarity"]),
+        parsePercent(headers.get("X-Ghost-Emotional-Clarity"), derivedEmotionalClarity)
       ),
       10,
       100
     ),
     naturalPacing:
-      normalizeEnum(naturalPacingRaw, headers.get("X-Ghost-Natural-Pacing")) === "optimized"
+      normalizeEnum(
+        pickFirst(fromObject, ["naturalPacing", "natural_pacing"]),
+        headers.get("X-Ghost-Natural-Pacing") || derivedNaturalPacing
+      ) === "optimized"
         ? "optimized"
         : "adjusting",
     emphasisDetection:
-      normalizeEnum(emphasisDetectionRaw, headers.get("X-Ghost-Emphasis-Detection")) === "active"
+      normalizeEnum(
+        pickFirst(fromObject, ["emphasisDetection", "emphasis_detection"]),
+        headers.get("X-Ghost-Emphasis-Detection") || derivedEmphasis
+      ) === "active"
         ? "active"
         : "warming",
+  };
+}
+
+function parseDetails(raw: unknown, headers: Headers): EnhancementDetails {
+  const fromObject = typeof raw === "object" && raw !== null ? (raw as Record<string, unknown>) : {};
+
+  const confidenceRaw = parseFloatValue(
+    pickFirst(fromObject, ["auto_template_confidence", "autoTemplateConfidence"]),
+    parseFloatValue(headers.get("X-Ghost-Auto-Template-Confidence"), -1)
+  );
+
+  return {
+    templateUsed:
+      parseText(pickFirst(fromObject, ["template_used", "templateUsed"])) ||
+      parseText(headers.get("X-Ghost-Template-Used")),
+    emotionFrom:
+      parseText(pickFirst(fromObject, ["emotion_from", "emotionFrom"])) ||
+      parseText(headers.get("X-Ghost-Emotion-From")),
+    emotionTo:
+      parseText(pickFirst(fromObject, ["emotion_to", "emotionTo"])) ||
+      parseText(headers.get("X-Ghost-Emotion-To")),
+    secondaryEmotionTo:
+      parseText(pickFirst(fromObject, ["secondary_emotion_to", "secondaryEmotionTo"])) ||
+      parseText(headers.get("X-Ghost-Secondary-Emotion-To")),
+    curveFrom:
+      parseText(pickFirst(fromObject, ["curve_from", "curveFrom"])) ||
+      parseText(headers.get("X-Ghost-Curve-From")),
+    curveTo:
+      parseText(pickFirst(fromObject, ["curve_to", "curveTo"])) ||
+      parseText(headers.get("X-Ghost-Curve-To")),
+    curveChanged: parseBoolValue(
+      pickFirst(fromObject, ["curve_changed", "curveChanged"]),
+      parseBoolValue(headers.get("X-Ghost-Curve-Changed"), false)
+    ),
+    autoTemplateConfidence: confidenceRaw < 0 ? null : clampFloat(confidenceRaw, 0, 1),
   };
 }
 
@@ -160,6 +270,30 @@ function normalizeEnum(primary: unknown, fallback: string | null): string {
   return (fallback || "").toLowerCase();
 }
 
+function parseText(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
+function parseFloatValue(value: unknown, fallback: number): number {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string") {
+    const n = Number(value);
+    if (Number.isFinite(n)) return n;
+  }
+  return fallback;
+}
+
+function parseBoolValue(value: unknown, fallback: boolean): boolean {
+  if (typeof value === "boolean") return value;
+  if (typeof value === "string") {
+    if (value.toLowerCase() === "true") return true;
+    if (value.toLowerCase() === "false") return false;
+  }
+  return fallback;
+}
+
 function parsePercent(value: unknown, fallback: number): number {
   if (typeof value === "number" && Number.isFinite(value)) {
     return Math.round(value);
@@ -171,6 +305,12 @@ function parsePercent(value: unknown, fallback: number): number {
     }
   }
   return fallback;
+}
+
+function clampFloat(value: number, min: number, max: number): number {
+  if (value < min) return min;
+  if (value > max) return max;
+  return value;
 }
 
 /**
@@ -246,6 +386,16 @@ function enhanceAudioBuffer(wavData: Uint8Array): EnhancementResult {
       audio: encodeWav(enhanced, sampleRate, numChannels, bitsPerSample),
       deltas,
       source: "simulated",
+      details: {
+        templateUsed: null,
+        emotionFrom: null,
+        emotionTo: null,
+        secondaryEmotionTo: null,
+        curveFrom: null,
+        curveTo: null,
+        curveChanged: false,
+        autoTemplateConfidence: null,
+      },
     };
   } catch (error) {
     console.error("WAV parse error:", error);
@@ -259,6 +409,16 @@ function enhanceAudioBuffer(wavData: Uint8Array): EnhancementResult {
         emphasisDetection: "warming",
       },
       source: "simulated",
+      details: {
+        templateUsed: null,
+        emotionFrom: null,
+        emotionTo: null,
+        secondaryEmotionTo: null,
+        curveFrom: null,
+        curveTo: null,
+        curveChanged: false,
+        autoTemplateConfidence: null,
+      },
     };
   }
 }
