@@ -16,7 +16,11 @@ export function RecordingStudio({
   const [enhancedAudio, setEnhancedAudio] = useState<string | null>(null);
   const [isEnhancing, setIsEnhancing] = useState(false);
   const [error, setError] = useState("");
+  const [permissionHint, setPermissionHint] = useState("");
   const [recordingTime, setRecordingTime] = useState(0);
+  const [microphones, setMicrophones] = useState<MediaDeviceInfo[]>([]);
+  const [selectedMicrophoneId, setSelectedMicrophoneId] = useState("default");
+  const [isCheckingDevices, setIsCheckingDevices] = useState(false);
   const [enhancementSource, setEnhancementSource] = useState<"ghost" | "simulated">("simulated");
   const [enhancementDetails, setEnhancementDetails] = useState<{
     templateUsed: string;
@@ -48,11 +52,62 @@ export function RecordingStudio({
 
   const [intelligenceDeltas, setIntelligenceDeltas] = useState(defaultDeltas);
 
+  const refreshMicrophones = async () => {
+    if (!navigator.mediaDevices?.enumerateDevices) {
+      setError("Microphone APIs are not available in this browser.");
+      return [];
+    }
+
+    const devices = await navigator.mediaDevices.enumerateDevices();
+    const mics = devices.filter((d) => d.kind === "audioinput");
+    setMicrophones(mics);
+
+    if (mics.length === 0) {
+      setError("No microphone detected. Connect a microphone and try again.");
+      return [];
+    }
+
+    setError("");
+    return mics;
+  };
+
   // Start recording
   const startRecording = async () => {
     try {
       setError("");
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      setPermissionHint("");
+      setIsCheckingDevices(true);
+
+      if (!navigator.mediaDevices?.getUserMedia) {
+        throw new Error("This browser does not support microphone access.");
+      }
+
+      // 1) Enumerate first so we can tell users clearly when no input device exists.
+      const mics = await refreshMicrophones();
+      if (mics.length === 0) {
+        setIsCheckingDevices(false);
+        return;
+      }
+
+      // 2) Prompt and acquire using default mic first for maximum compatibility.
+      let stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+
+      // 3) If user selected a specific mic, try switching to it. If that fails, keep default.
+      if (selectedMicrophoneId !== "default") {
+        try {
+          stream.getTracks().forEach((track) => track.stop());
+          stream = await navigator.mediaDevices.getUserMedia({
+            audio: {
+              deviceId: { ideal: selectedMicrophoneId },
+            },
+          });
+        } catch {
+          stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+          setPermissionHint("Selected microphone unavailable. Using default microphone.");
+        }
+      }
+
+      setIsCheckingDevices(false);
       streamRef.current = stream;
 
       const mediaRecorder = new MediaRecorder(stream);
@@ -92,9 +147,30 @@ export function RecordingStudio({
         });
       }, 1000);
     } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "Failed to access microphone. Please check permissions."
-      );
+      setIsCheckingDevices(false);
+      if (err instanceof DOMException) {
+        if (err.name === "NotFoundError") {
+          setError("No microphone found. Connect a microphone and try again.");
+          return;
+        }
+        if (err.name === "NotAllowedError") {
+          setError("Microphone permission denied.");
+          setPermissionHint("Enable microphone access in your browser site settings, then retry.");
+          return;
+        }
+        if (err.name === "NotReadableError") {
+          setError("Microphone is in use by another app.");
+          setPermissionHint("Close other apps using the microphone and try again.");
+          return;
+        }
+        if (err.name === "OverconstrainedError") {
+          setError("Selected microphone is unavailable.");
+          setPermissionHint("Switch to Default Microphone and retry.");
+          return;
+        }
+      }
+
+      setError(err instanceof Error ? err.message : "Failed to access microphone.");
     }
   };
 
@@ -131,6 +207,7 @@ export function RecordingStudio({
     setRecordingTime(0);
     if (audioRef.current) audioRef.current.src = "";
     setError("");
+    setPermissionHint("");
   };
 
   // Enhance audio via API
@@ -215,7 +292,34 @@ export function RecordingStudio({
 
   // Cleanup
   useEffect(() => {
+    let mounted = true;
+
+    const initializeDevices = async () => {
+      try {
+        const mics = await refreshMicrophones();
+        if (!mounted) return;
+        if (mics.length === 0) {
+          setPermissionHint("If your mic is connected, refresh the page after granting microphone permissions.");
+        }
+      } catch {
+        if (!mounted) return;
+        setError("Unable to list microphones in this browser.");
+      }
+    };
+
+    initializeDevices();
+
+    const onDeviceChange = () => {
+      refreshMicrophones().catch(() => {
+        setError("Unable to refresh microphone list.");
+      });
+    };
+
+    navigator.mediaDevices?.addEventListener?.("devicechange", onDeviceChange);
+
     return () => {
+      mounted = false;
+      navigator.mediaDevices?.removeEventListener?.("devicechange", onDeviceChange);
       if (timerRef.current) clearInterval(timerRef.current);
     };
   }, []);
@@ -255,17 +359,43 @@ export function RecordingStudio({
           </div>
         )}
 
+        {permissionHint && (
+          <div className="mb-4 rounded-lg border border-amber-300/30 bg-amber-500/10 p-3">
+            <p className="text-xs text-amber-200">{permissionHint}</p>
+          </div>
+        )}
+
+        <div className="mb-4 grid gap-2">
+          <label className="text-xs uppercase tracking-[0.22em] text-slate-500">Microphone</label>
+          <select
+            value={selectedMicrophoneId}
+            onChange={(e) => setSelectedMicrophoneId(e.target.value)}
+            className="rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-sm text-slate-200 outline-none transition focus:border-sky-400/50"
+          >
+            <option value="default">Default Microphone</option>
+            {microphones.map((mic, i) => (
+              <option key={mic.deviceId || `mic-${i}`} value={mic.deviceId}>
+                {mic.label || `Microphone ${i + 1}`}
+              </option>
+            ))}
+          </select>
+          <p className="text-xs text-slate-500">
+            {microphones.length > 0 ? `${microphones.length} input device${microphones.length > 1 ? "s" : ""} detected` : "No microphone detected"}
+          </p>
+        </div>
+
         <div className="flex flex-wrap gap-3">
           {!isRecording && !hasRecording && (
             <button
               onClick={startRecording}
+              disabled={isCheckingDevices || microphones.length === 0}
               className="flex items-center gap-2 rounded-lg border border-emerald-400/40 bg-emerald-500/15 px-4 py-2 text-sm font-medium text-emerald-300 transition hover:border-emerald-400/60 hover:bg-emerald-500/25"
             >
               <span className="relative flex h-3 w-3">
                 <span className="absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75 animate-pulse" />
                 <span className="relative inline-flex h-3 w-3 rounded-full bg-emerald-400" />
               </span>
-              Record
+                {isCheckingDevices ? "Checking devices..." : "Record"}
             </button>
           )}
 
