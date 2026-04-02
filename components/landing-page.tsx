@@ -782,7 +782,7 @@ export function LandingPage() {
         {/* Methodology note */}
         <div className="mt-6 rounded-2xl border border-sky-400/20 bg-sky-500/[0.04] p-6">
           <p className="text-sm font-medium text-white">
-            {isStudioMode ? "Recording Studio — How it works" : "How these demos were made"}
+            {isStudioMode ? "Recording Studio — Experience the difference in intelligence" : "How these demos were made"}
           </p>
           <p className="mt-3 text-xs leading-6 text-slate-400">
             {isStudioMode ? (
@@ -791,7 +791,7 @@ export function LandingPage() {
                 <strong className="text-slate-300">Generate Enhanced Version</strong> to hear what happens when
                 Ghost Intelligence processes your delivery. This sends your audio through our prosody engine:{" "}
                 <strong className="text-slate-300">pitch orchestration, emphasis scoring, and pacing optimization</strong>
-                . Compare side-by-side to hear the lift in naturalness, credibility, and engagement.
+                . This is presented as an intelligence layer with measurable deltas, not a cosmetic voice filter.
               </>
             ) : (
               <>

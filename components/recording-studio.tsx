@@ -13,12 +13,18 @@ export function RecordingStudio({
 
   const [isRecording, setIsRecording] = useState(false);
   const [hasRecording, setHasRecording] = useState(false);
-  const [isProcessing, setIsProcessing] = useState(false);
   const [enhancedAudio, setEnhancedAudio] = useState<string | null>(null);
   const [isEnhancing, setIsEnhancing] = useState(false);
   const [error, setError] = useState("");
   const [recordingTime, setRecordingTime] = useState(0);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
+
+  const intelligenceDeltas = [
+    "Prosody: +42%",
+    "Emotional clarity: +67%",
+    "Natural pacing: optimized",
+    "Emphasis detection: active",
+  ];
 
   // Start recording
   const startRecording = async () => {
@@ -147,9 +153,26 @@ export function RecordingStudio({
 
   return (
     <div className="space-y-5">
+      <div className="panel p-6">
+        <p className="text-xs uppercase tracking-[0.28em] text-slate-500">Experience the difference in intelligence</p>
+        <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          {[
+            "1. Record",
+            "2. Standard Voice Output",
+            "3. Ghost Voice Intelligence",
+            "4. See what changed",
+          ].map((step) => (
+            <div key={step} className="rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2 text-xs text-slate-300">
+              {step}
+            </div>
+          ))}
+        </div>
+      </div>
+
       {/* Recording controls */}
       <div className="panel p-6">
-        <p className="text-xs uppercase tracking-[0.28em] text-slate-500 mb-4">Record your voice</p>
+        <p className="mb-2 text-xs uppercase tracking-[0.28em] text-slate-500">Step 1: Record</p>
+        <p className="mb-4 text-sm text-slate-300">Say anything - a sales pitch, greeting, or message.</p>
 
         {error && (
           <div className="mb-4 rounded-lg border border-red-400/30 bg-red-500/10 p-3">
@@ -217,7 +240,8 @@ export function RecordingStudio({
       {/* Before: user recording */}
       <div className="grid gap-5 lg:grid-cols-2">
         <div className="panel p-6">
-          <p className="text-xs uppercase tracking-[0.28em] text-slate-500">Before: your voice</p>
+          <p className="text-xs uppercase tracking-[0.28em] text-slate-500">Step 2</p>
+          <p className="mt-2 text-sm font-medium text-rose-300">❌ Standard Voice Output</p>
           <div className="relative mt-4 overflow-hidden rounded-lg border border-white/6 bg-black/30 p-4">
             {hasRecording ? (
               <audio
@@ -236,7 +260,8 @@ export function RecordingStudio({
 
         {/* After: enhanced version */}
         <div className="panel p-6">
-          <p className="text-xs uppercase tracking-[0.28em] text-slate-500">After: Ghost enhanced</p>
+          <p className="text-xs uppercase tracking-[0.28em] text-slate-500">Step 3</p>
+          <p className="mt-2 text-sm font-medium text-emerald-300">🔥 Ghost Voice Intelligence</p>
           <div className="relative mt-4 overflow-hidden rounded-lg border border-white/6 bg-black/30 p-4">
             {enhancedAudio ? (
               <audio className="w-full" controls preload="metadata">
@@ -245,7 +270,7 @@ export function RecordingStudio({
             ) : (
               <div className="flex h-12 items-center justify-center">
                 <p className="text-xs text-slate-500">
-                  {hasRecording ? "Click Generate below" : "No recording yet"}
+                  {hasRecording ? "Click Generate below to process intelligence layer" : "No recording yet"}
                 </p>
               </div>
             )}
@@ -266,9 +291,26 @@ export function RecordingStudio({
               Processing with Ghost Intelligence...
             </div>
           ) : (
-            "Generate Enhanced Version"
+            "Generate Ghost Intelligence Pass"
           )}
         </button>
+      )}
+
+      {enhancedAudio && (
+        <div className="panel border-emerald-400/20 bg-emerald-500/[0.04] p-6">
+          <p className="text-xs uppercase tracking-[0.28em] text-slate-500">Step 4</p>
+          <p className="mt-2 text-sm font-medium text-white">What changed in the output</p>
+          <div className="mt-4 grid gap-3 sm:grid-cols-2">
+            {intelligenceDeltas.map((delta) => (
+              <div key={delta} className="rounded-xl border border-white/10 bg-black/20 px-3 py-3 text-sm text-emerald-200">
+                ↑ {delta}
+              </div>
+            ))}
+          </div>
+          <p className="mt-4 text-xs leading-6 text-slate-400">
+            Initial uplift values are simulated for demo clarity; wire this panel to live model telemetry as Ghost evaluation endpoints are finalized.
+          </p>
+        </div>
       )}
 
       {/* Retry after enhancement */}
