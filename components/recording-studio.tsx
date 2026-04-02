@@ -9,10 +9,12 @@ export function RecordingStudio({
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const chunksRef = useRef<Blob[]>([]);
-  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const recordedBlobRef = useRef<Blob | null>(null);
 
   const [isRecording, setIsRecording] = useState(false);
   const [hasRecording, setHasRecording] = useState(false);
+  const [recordedAudioUrl, setRecordedAudioUrl] = useState<string | null>(null);
+  const [recordedMimeType, setRecordedMimeType] = useState("audio/webm");
   const [enhancedAudio, setEnhancedAudio] = useState<string | null>(null);
   const [isEnhancing, setIsEnhancing] = useState(false);
   const [error, setError] = useState("");
@@ -51,6 +53,23 @@ export function RecordingStudio({
   };
 
   const [intelligenceDeltas, setIntelligenceDeltas] = useState(defaultDeltas);
+
+  const pickRecorderMimeType = () => {
+    const candidates = [
+      "audio/webm;codecs=opus",
+      "audio/webm",
+      "audio/ogg;codecs=opus",
+      "audio/mp4",
+    ];
+
+    for (const type of candidates) {
+      if (typeof MediaRecorder !== "undefined" && MediaRecorder.isTypeSupported(type)) {
+        return type;
+      }
+    }
+
+    return "";
+  };
 
   const refreshMicrophones = async () => {
     if (!navigator.mediaDevices?.enumerateDevices) {
@@ -110,9 +129,14 @@ export function RecordingStudio({
       setIsCheckingDevices(false);
       streamRef.current = stream;
 
-      const mediaRecorder = new MediaRecorder(stream);
+      const preferredMimeType = pickRecorderMimeType();
+      const mediaRecorder = preferredMimeType
+        ? new MediaRecorder(stream, { mimeType: preferredMimeType })
+        : new MediaRecorder(stream);
+
       mediaRecorderRef.current = mediaRecorder;
       chunksRef.current = [];
+      recordedBlobRef.current = null;
       setRecordingTime(0);
 
       mediaRecorder.ondataavailable = (e) => {
@@ -120,10 +144,30 @@ export function RecordingStudio({
       };
 
       mediaRecorder.onstop = () => {
-        const blob = new Blob(chunksRef.current, { type: "audio/wav" });
+        if (chunksRef.current.length === 0) {
+          setError("Recording captured no audio data. Please try again.");
+          return;
+        }
+
+        const mime = mediaRecorder.mimeType || preferredMimeType || "audio/webm";
+        const blob = new Blob(chunksRef.current, { type: mime });
+
+        if (blob.size === 0) {
+          setError("Recorded audio was empty. Please retry.");
+          return;
+        }
+
+        if (recordedAudioUrl) {
+          URL.revokeObjectURL(recordedAudioUrl);
+        }
+
         const url = URL.createObjectURL(blob);
-        if (audioRef.current) audioRef.current.src = url;
+        recordedBlobRef.current = blob;
+        setRecordedAudioUrl(url);
+        setRecordedMimeType(mime);
         setHasRecording(true);
+        chunksRef.current = [];
+
         if (onRecordingComplete) {
           const reader = new FileReader();
           reader.onloadend = () => {
@@ -190,8 +234,19 @@ export function RecordingStudio({
   // Clear recording
   const clearRecording = () => {
     chunksRef.current = [];
+    recordedBlobRef.current = null;
     setHasRecording(false);
+
+    if (recordedAudioUrl) {
+      URL.revokeObjectURL(recordedAudioUrl);
+    }
+    setRecordedAudioUrl(null);
+
+    if (enhancedAudio) {
+      URL.revokeObjectURL(enhancedAudio);
+    }
     setEnhancedAudio(null);
+
     setIntelligenceDeltas(defaultDeltas);
     setEnhancementSource("simulated");
     setEnhancementDetails({
@@ -205,33 +260,25 @@ export function RecordingStudio({
       autoTemplateConfidence: "",
     });
     setRecordingTime(0);
-    if (audioRef.current) audioRef.current.src = "";
     setError("");
     setPermissionHint("");
   };
 
   // Enhance audio via API
   const enhanceAudio = async () => {
-    if (!audioRef.current || !audioRef.current.src) return;
+    if (!recordedAudioUrl) {
+      setError("Record audio first, then generate enhancement.");
+      return;
+    }
 
     setIsEnhancing(true);
     try {
-      let response: Response;
-
-      if (audioRef.current.src.includes("blob:")) {
-        // Get blob from ObjectURL
-        const res = await fetch(audioRef.current.src);
-        response = res;
-      } else {
-        response = await fetch(audioRef.current.src);
-      }
-
-      if (!response.ok) throw new Error("Failed to fetch audio");
-      const blob = await response.blob();
+      const blob = recordedBlobRef.current ?? (await (await fetch(recordedAudioUrl)).blob());
 
       // Call backend enhancement API
       const fd = new FormData();
-      fd.append("audio", blob, "recording.wav");
+      const fileExt = recordedMimeType.includes("ogg") ? "ogg" : recordedMimeType.includes("mp4") ? "m4a" : "webm";
+      fd.append("audio", blob, `recording.${fileExt}`);
 
       const enhanceRes = await fetch("/api/enhance-voice", {
         method: "POST",
@@ -281,6 +328,11 @@ export function RecordingStudio({
       });
 
       const enhanced = await enhanceRes.arrayBuffer();
+
+      if (enhancedAudio) {
+        URL.revokeObjectURL(enhancedAudio);
+      }
+
       const enhancedUrl = URL.createObjectURL(new Blob([enhanced], { type: "audio/wav" }));
       setEnhancedAudio(enhancedUrl);
     } catch (err) {
@@ -321,8 +373,16 @@ export function RecordingStudio({
       mounted = false;
       navigator.mediaDevices?.removeEventListener?.("devicechange", onDeviceChange);
       if (timerRef.current) clearInterval(timerRef.current);
+
+      if (recordedAudioUrl) {
+        URL.revokeObjectURL(recordedAudioUrl);
+      }
+
+      if (enhancedAudio) {
+        URL.revokeObjectURL(enhancedAudio);
+      }
     };
-  }, []);
+  }, [recordedAudioUrl, enhancedAudio]);
 
   const formatTime = (secs: number) => {
     const m = Math.floor(secs / 60);
@@ -450,10 +510,10 @@ export function RecordingStudio({
           <div className="relative mt-4 overflow-hidden rounded-lg border border-white/6 bg-black/30 p-4">
             {hasRecording ? (
               <audio
-                ref={audioRef}
                 className="w-full"
                 controls
                 preload="metadata"
+                src={recordedAudioUrl ?? undefined}
               />
             ) : (
               <div className="flex h-12 items-center justify-center">
