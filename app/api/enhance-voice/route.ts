@@ -117,6 +117,10 @@ async function tryGhostEnhancement(audioFile: File, wavData: Uint8Array): Promis
 function parseDeltas(raw: unknown, headers: Headers): IntelligenceDeltas {
   const fromObject = typeof raw === "object" && raw !== null ? (raw as Record<string, unknown>) : {};
 
+  const emotionalClarityRaw = pickFirst(fromObject, ["emotionalClarity", "emotional_clarity"]);
+  const naturalPacingRaw = pickFirst(fromObject, ["naturalPacing", "natural_pacing"]);
+  const emphasisDetectionRaw = pickFirst(fromObject, ["emphasisDetection", "emphasis_detection"]);
+
   return {
     prosody: clampInt(
       parsePercent(fromObject.prosody, parsePercent(headers.get("X-Ghost-Prosody"), 42)),
@@ -125,21 +129,30 @@ function parseDeltas(raw: unknown, headers: Headers): IntelligenceDeltas {
     ),
     emotionalClarity: clampInt(
       parsePercent(
-        fromObject.emotionalClarity,
+        emotionalClarityRaw,
         parsePercent(headers.get("X-Ghost-Emotional-Clarity"), 67)
       ),
       10,
       100
     ),
     naturalPacing:
-      normalizeEnum(fromObject.naturalPacing, headers.get("X-Ghost-Natural-Pacing")) === "optimized"
+      normalizeEnum(naturalPacingRaw, headers.get("X-Ghost-Natural-Pacing")) === "optimized"
         ? "optimized"
         : "adjusting",
     emphasisDetection:
-      normalizeEnum(fromObject.emphasisDetection, headers.get("X-Ghost-Emphasis-Detection")) === "active"
+      normalizeEnum(emphasisDetectionRaw, headers.get("X-Ghost-Emphasis-Detection")) === "active"
         ? "active"
         : "warming",
   };
+}
+
+function pickFirst(source: Record<string, unknown>, keys: string[]): unknown {
+  for (const key of keys) {
+    if (key in source) {
+      return source[key];
+    }
+  }
+  return undefined;
 }
 
 function normalizeEnum(primary: unknown, fallback: string | null): string {

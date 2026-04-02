@@ -17,6 +17,7 @@ export function RecordingStudio({
   const [isEnhancing, setIsEnhancing] = useState(false);
   const [error, setError] = useState("");
   const [recordingTime, setRecordingTime] = useState(0);
+  const [enhancementSource, setEnhancementSource] = useState<"ghost" | "simulated">("simulated");
   const timerRef = useRef<NodeJS.Timeout | null>(null);
 
   const defaultDeltas = {
@@ -97,6 +98,7 @@ export function RecordingStudio({
     setHasRecording(false);
     setEnhancedAudio(null);
     setIntelligenceDeltas(defaultDeltas);
+    setEnhancementSource("simulated");
     setRecordingTime(0);
     if (audioRef.current) audioRef.current.src = "";
     setError("");
@@ -139,6 +141,7 @@ export function RecordingStudio({
         enhanceRes.headers.get("X-Ghost-Natural-Pacing") ?? defaultDeltas.naturalPacing;
       const emphasisDetection =
         enhanceRes.headers.get("X-Ghost-Emphasis-Detection") ?? defaultDeltas.emphasisDetection;
+      const source = enhanceRes.headers.get("X-Ghost-Source") === "ghost" ? "ghost" : "simulated";
 
       setIntelligenceDeltas({
         prosody,
@@ -146,6 +149,7 @@ export function RecordingStudio({
         naturalPacing,
         emphasisDetection,
       });
+      setEnhancementSource(source);
 
       const enhanced = await enhanceRes.arrayBuffer();
       const enhancedUrl = URL.createObjectURL(new Blob([enhanced], { type: "audio/wav" }));
@@ -318,7 +322,18 @@ export function RecordingStudio({
       {enhancedAudio && (
         <div className="panel border-emerald-400/20 bg-emerald-500/[0.04] p-6">
           <p className="text-xs uppercase tracking-[0.28em] text-slate-500">Step 4</p>
-          <p className="mt-2 text-sm font-medium text-white">What changed in the output</p>
+          <div className="mt-2 flex items-center justify-between gap-3">
+            <p className="text-sm font-medium text-white">What changed in the output</p>
+            <span
+              className={`rounded-full border px-2.5 py-1 text-[10px] uppercase tracking-[0.16em] ${
+                enhancementSource === "ghost"
+                  ? "border-emerald-300/30 bg-emerald-500/15 text-emerald-200"
+                  : "border-amber-300/30 bg-amber-500/10 text-amber-200"
+              }`}
+            >
+              {enhancementSource === "ghost" ? "Live Ghost TTS" : "Local Simulation"}
+            </span>
+          </div>
           <div className="mt-4 grid gap-3 sm:grid-cols-2">
             <div className="rounded-xl border border-white/10 bg-black/20 px-3 py-3 text-sm text-emerald-200">
               ↑ Prosody: {intelligenceDeltas.prosody}
