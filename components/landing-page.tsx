@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import type { ReactNode } from "react";
 import { BackgroundScene } from "@/components/background-scene";
@@ -83,6 +84,9 @@ const nav = [
   { label: "Pricing", href: "#pricing" },
 ];
 
+const demoLink = "https://cal.read.ai/ghost-ai-solutions";
+const docsLink = "/docs";
+const apiLink = "/api-reference";
 const beforeWave = [14, 20, 22, 18, 24, 16, 20, 22, 18, 24, 16, 22, 18, 20, 24, 16];
 const afterWave = [18, 46, 24, 68, 40, 82, 28, 58, 30, 92, 44, 70, 24, 60, 38, 76];
 
@@ -164,10 +168,183 @@ function Waveform({ expressive = false }: { expressive?: boolean }) {
   );
 }
 
-export function LandingPage() {
+function ContactModal({
+  isOpen,
+  onClose,
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+}) {
+  const [name, setName] = useState("");
+  const [company, setCompany] = useState("");
+  const [email, setEmail] = useState("");
+  const [message, setMessage] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState("");
+  const [isSubmitted, setIsSubmitted] = useState(false);
+
+  useEffect(() => {
+    if (!isOpen) {
+      return;
+    }
+
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        onClose();
+      }
+    };
+
+    const originalOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    setSubmitError("");
+    setIsSubmitted(false);
+    window.addEventListener("keydown", handleEscape);
+
+    return () => {
+      document.body.style.overflow = originalOverflow;
+      window.removeEventListener("keydown", handleEscape);
+    };
+  }, [isOpen, onClose]);
+
+  if (!isOpen) {
+    return null;
+  }
+
+  const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+
+    setIsSubmitting(true);
+    setSubmitError("");
+
+    void fetch("/api/contact", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        name,
+        company,
+        email,
+        message,
+      }),
+    })
+      .then(async (response) => {
+        const payload = (await response.json().catch(() => null)) as { error?: string } | null;
+
+        if (!response.ok) {
+          throw new Error(payload?.error || "Unable to send inquiry right now.");
+        }
+
+        setIsSubmitted(true);
+        setName("");
+        setCompany("");
+        setEmail("");
+        setMessage("");
+      })
+      .catch((error: unknown) => {
+        setSubmitError(error instanceof Error ? error.message : "Unable to send inquiry right now.");
+      })
+      .finally(() => {
+        setIsSubmitting(false);
+      });
+  };
+
   return (
-    <main className="relative overflow-hidden pb-20">
-      <div className="absolute inset-0 -z-10 bg-[radial-gradient(circle_at_top_left,rgba(124,58,237,0.16),transparent_20%),radial-gradient(circle_at_80%_15%,rgba(14,165,233,0.16),transparent_20%)]" />
+    <div className="fixed inset-0 z-50 flex items-center justify-center px-4 py-8">
+      <button
+        aria-label="Close inquiry form"
+        className="absolute inset-0 bg-black/70 backdrop-blur-sm"
+        onClick={onClose}
+        type="button"
+      />
+      <motion.div
+        initial={{ opacity: 0, y: 18, scale: 0.98 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        transition={{ duration: 0.24, ease: "easeOut" }}
+        className="panel relative z-10 w-full max-w-2xl p-6 sm:p-8"
+      >
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <span className="eyebrow">Contact</span>
+            <h3 className="mt-4 text-2xl font-semibold text-white sm:text-3xl">Start an inquiry</h3>
+            <p className="mt-3 max-w-xl text-sm leading-7 text-slate-300">
+              Share your use case and Ghost will send it directly to the team for follow-up.
+            </p>
+          </div>
+          <button
+            aria-label="Close inquiry form"
+            className="flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-white/5 text-slate-300 transition hover:bg-white/10 hover:text-white"
+            onClick={onClose}
+            type="button"
+          >
+            ×
+          </button>
+        </div>
+
+        <form className="mt-8 grid gap-4 sm:grid-cols-2" onSubmit={handleSubmit}>
+          <label className="text-sm text-slate-300">
+            <span className="mb-2 block">Name</span>
+            <input
+              required
+              className="w-full rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-white outline-none transition focus:border-sky-400/50"
+              onChange={(event) => setName(event.target.value)}
+              value={name}
+            />
+          </label>
+          <label className="text-sm text-slate-300">
+            <span className="mb-2 block">Company</span>
+            <input
+              required
+              className="w-full rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-white outline-none transition focus:border-sky-400/50"
+              onChange={(event) => setCompany(event.target.value)}
+              value={company}
+            />
+          </label>
+          <label className="text-sm text-slate-300 sm:col-span-2">
+            <span className="mb-2 block">Work email</span>
+            <input
+              required
+              type="email"
+              className="w-full rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-white outline-none transition focus:border-sky-400/50"
+              onChange={(event) => setEmail(event.target.value)}
+              value={email}
+            />
+          </label>
+          <label className="text-sm text-slate-300 sm:col-span-2">
+            <span className="mb-2 block">What are you building?</span>
+            <textarea
+              required
+              rows={5}
+              className="w-full rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-white outline-none transition focus:border-sky-400/50"
+              onChange={(event) => setMessage(event.target.value)}
+              value={message}
+            />
+          </label>
+          <div className="sm:col-span-2 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="text-xs uppercase tracking-[0.24em] text-slate-500">Direct server-side delivery</p>
+              {submitError ? <p className="mt-2 text-sm text-rose-300">{submitError}</p> : null}
+              {isSubmitted ? (
+                <p className="mt-2 text-sm text-emerald-300">Inquiry sent. Ghost AI Solutions will follow up directly.</p>
+              ) : null}
+            </div>
+            <button className="button-primary disabled:cursor-not-allowed disabled:opacity-60" disabled={isSubmitting} type="submit">
+              {isSubmitting ? "Sending..." : "Send inquiry"}
+            </button>
+          </div>
+        </form>
+      </motion.div>
+    </div>
+  );
+}
+
+export function LandingPage() {
+  const [isContactOpen, setIsContactOpen] = useState(false);
+
+  return (
+    <>
+      <main className="relative overflow-hidden pb-20">
+        <div className="absolute inset-0 -z-10 bg-[radial-gradient(circle_at_top_left,rgba(124,58,237,0.16),transparent_20%),radial-gradient(circle_at_80%_15%,rgba(14,165,233,0.16),transparent_20%)]" />
 
       <header className="shell pt-6 sm:pt-8">
         <div className="panel flex items-center justify-between px-5 py-4 sm:px-6">
@@ -184,7 +361,7 @@ export function LandingPage() {
               </a>
             ))}
           </nav>
-          <a href="#final-cta" className="button-secondary hidden sm:inline-flex">
+          <a href={demoLink} className="button-secondary hidden sm:inline-flex">
             Book a Demo
           </a>
         </div>
@@ -219,7 +396,7 @@ export function LandingPage() {
                 transition={{ duration: 0.85, delay: 0.16, ease: "easeOut" }}
                 className="mt-8 flex flex-col gap-4 sm:flex-row"
               >
-                <a href="#final-cta" className="button-primary">
+                <a href={demoLink} className="button-primary">
                   Book a Demo
                 </a>
                 <a href="#architecture" className="button-secondary">
@@ -486,7 +663,7 @@ export function LandingPage() {
             <h2 className="mt-6 text-3xl font-semibold tracking-tight text-white sm:text-5xl">
               Your AI Doesn’t Need Better Words — It Needs a Better Voice
             </h2>
-            <a href="mailto:demo@ghostaisolutions.com" className="button-primary mt-8">
+            <a href={demoLink} className="button-primary mt-8">
               Book a Demo
             </a>
           </div>
@@ -497,18 +674,20 @@ export function LandingPage() {
         <div className="flex flex-col gap-4 border-t border-white/10 pt-6 text-sm text-slate-400 sm:flex-row sm:items-center sm:justify-between">
           <p>Ghost AI Solutions</p>
           <div className="flex flex-wrap gap-5">
-            <a href="#" className="transition hover:text-white">
+            <a href={docsLink} className="transition hover:text-white">
               Docs
             </a>
-            <a href="#architecture" className="transition hover:text-white">
+            <a href={apiLink} className="transition hover:text-white">
               API
             </a>
-            <a href="mailto:contact@ghostaisolutions.com" className="transition hover:text-white">
+            <button className="transition hover:text-white" onClick={() => setIsContactOpen(true)} type="button">
               Contact
-            </a>
+            </button>
           </div>
         </div>
       </footer>
-    </main>
+      </main>
+      <ContactModal isOpen={isContactOpen} onClose={() => setIsContactOpen(false)} />
+    </>
   );
 }
