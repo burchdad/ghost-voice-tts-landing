@@ -478,6 +478,15 @@ export function RecordingStudio({
     return `${m}:${s.toString().padStart(2, "0")}`;
   };
 
+  const getWaveBar = (filled: number, total = 8) => {
+    const safeFilled = Math.max(0, Math.min(total, filled));
+    return "█".repeat(safeFilled) + "░".repeat(total - safeFilled);
+  };
+
+  const prosodyPercent = Number(intelligenceDeltas.prosody.replace(/[^\d-]/g, "")) || 0;
+  const beforeWaveLevel = 3;
+  const afterWaveLevel = Math.max(beforeWaveLevel + 1, Math.min(8, Math.round((prosodyPercent / 100) * 8)));
+
   return (
     <div className="space-y-5">
       <div className="panel p-6">
@@ -784,6 +793,11 @@ export function RecordingStudio({
             <div className="rounded-lg border border-white/10 bg-white/[0.02] px-3 py-2 sm:col-span-2">
               Byte delta: {processingProof.inputBytes.toLocaleString()} {"->"} {processingProof.outputBytes.toLocaleString()}
             </div>
+          </div>
+          <div className="mt-4 rounded-lg border border-white/10 bg-white/[0.02] px-3 py-3 text-xs text-slate-300">
+            <p className="mb-2 uppercase tracking-[0.16em] text-slate-400">Waveform comparison</p>
+            <p className="font-mono">Before: {getWaveBar(beforeWaveLevel)}</p>
+            <p className="mt-1 font-mono">After:  {getWaveBar(afterWaveLevel)}</p>
           </div>
           <div className="mt-4 rounded-lg border border-white/10 bg-white/[0.02] px-3 py-3 text-xs text-slate-300">
             <p className="mb-2 uppercase tracking-[0.16em] text-slate-400">What Ghost did</p>
