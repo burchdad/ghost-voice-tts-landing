@@ -1,0 +1,52 @@
+{
+  "_comment": "Ghost Voice Intelligence — Demo generation config. Single source of truth for all A/B demo pairs.",
+  "outputDir": "public/audio",
+  "sourceVoicesDir": "scripts/source-voices",
+  "provider": "placeholder",
+  "elevenlabs": {
+    "_comment": "Set ELEVENLABS_API_KEY env var, then run: node scripts/generate-demos.mjs --provider elevenlabs",
+    "voiceId": "EXAVITQu4vr4xnSDxMaL",
+    "modelId": "eleven_turbo_v2_5",
+    "beforeSettings": {
+      "stability": 0.95,
+      "similarity_boost": 0.45,
+      "style": 0.0,
+      "use_speaker_boost": false
+    },
+    "afterSettings": {
+      "stability": 0.45,
+      "similarity_boost": 0.90,
+      "style": 0.65,
+      "use_speaker_boost": true
+    }
+  },
+  "openai": {
+    "_comment": "Set OPENAI_API_KEY env var, then run: node scripts/generate-demos.mjs --provider openai",
+    "voice": "alloy",
+    "model": "tts-1-hd",
+    "beforeSpeed": 0.85,
+    "afterSpeed": 1.0
+  },
+  "custom": {
+    "_comment": "Place your voice recording at scripts/source-voices/my-voice.wav, then run: node scripts/generate-demos.mjs --provider custom",
+    "voiceFile": "my-voice.wav",
+    "instructions": "The script will use this recording as the voice seed for both before/after pairs. Before: provider default settings applied. After: routed through Ghost prosody layer settings."
+  },
+  "demos": [
+    {
+      "id": "sales",
+      "label": "AI Sales Agent",
+      "script": "Hi, I noticed your team recently expanded into enterprise accounts. I wanted to reach out about how Ghost Voice Intelligence has helped similar sales teams increase warm reply rates by 30%, just by making their AI agent sound less robotic. Would you have 15 minutes this week to see what that looks like for your stack?"
+    },
+    {
+      "id": "support",
+      "label": "Customer Support",
+      "script": "I completely understand how frustrating that must be, and I want to make sure we get this resolved for you today. Let me pull up your account and take a look at what happened. I do see the issue right here, and I can fix this for you now. Is there anything else that has been bothering you about the experience?"
+    },
+    {
+      "id": "assistant",
+      "label": "Voice Assistant",
+      "script": "Sure, I can help with that. I will book the meeting for Thursday at 2 PM, send the agenda to both attendees, and add a prep reminder for the morning of. Just to confirm before I finalize — should I include the project brief, or just the agenda?"
+    }
+  ]
+}

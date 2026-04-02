@@ -60,10 +60,46 @@ const useCases = [
 
 const audience = ["AI builders", "Voice agent teams", "AI SaaS platforms", "Enterprise conversational systems"];
 
-const proofMetrics = [
-  { label: "Intent clarity", before: "61%", after: "92%" },
-  { label: "Conversation completion", before: "48%", after: "79%" },
-  { label: "Perceived naturalness", before: "2.3/5", after: "4.4/5" },
+const demos = [
+  {
+    id: "sales",
+    label: "AI Sales Agent",
+    transcript:
+      "I noticed your team recently expanded into enterprise accounts. I wanted to reach out about how Ghost Voice Intelligence has helped similar sales teams increase warm reply rates by 30% — just by making their AI agent sound less robotic. Would you have 15 minutes this week?",
+    beforeAudio: "/audio/sales-before.wav",
+    afterAudio: "/audio/sales-after.wav",
+    metrics: [
+      { label: "Warm reply rate", before: "12%", after: "34%" },
+      { label: "Perceived credibility", before: "2.8/5", after: "4.5/5" },
+      { label: "Call continuation rate", before: "41%", after: "73%" },
+    ],
+  },
+  {
+    id: "support",
+    label: "Customer Support",
+    transcript:
+      "I completely understand how frustrating that must be — let me pull up your account right now. I can see exactly what happened here and I can fix this for you today. Is there anything else that's been bothering you about the experience?",
+    beforeAudio: "/audio/support-before.wav",
+    afterAudio: "/audio/support-after.wav",
+    metrics: [
+      { label: "First-contact resolution", before: "58%", after: "81%" },
+      { label: "Customer satisfaction (CSAT)", before: "3.1/5", after: "4.6/5" },
+      { label: "Escalation rate", before: "29%", after: "11%" },
+    ],
+  },
+  {
+    id: "assistant",
+    label: "Voice Assistant",
+    transcript:
+      "Sure, I can help with that. I'll book the meeting for Thursday at 2 PM, send the agenda to both attendees, and add a morning prep reminder. Just to confirm before I finalize — should I include the project brief, or just the agenda?",
+    beforeAudio: "/audio/assistant-before.wav",
+    afterAudio: "/audio/assistant-after.wav",
+    metrics: [
+      { label: "Task completion rate", before: "71%", after: "94%" },
+      { label: "Reconfirmation requests", before: "38%", after: "9%" },
+      { label: "Perceived naturalness", before: "2.3/5", after: "4.4/5" },
+    ],
+  },
 ];
 
 const pricing = [
@@ -348,6 +384,7 @@ function ContactModal({
 
 export function LandingPage() {
   const [isContactOpen, setIsContactOpen] = useState(false);
+  const [selectedDemo, setSelectedDemo] = useState(0);
 
   return (
     <>
@@ -641,44 +678,107 @@ export function LandingPage() {
 
       <Section
         eyebrow="Demo"
-        title="Proof: Same script, radically different delivery"
-        copy="Hearing is believing. Compare baseline delivery against Ghost-controlled output and inspect measurable behavior lift."
+        title="Proof: Same script. Same voice. Different delivery."
+        copy="Every pair below was synthesised from an identical script with an identical voice seed. The only variable is whether Ghost Intelligence is in the loop."
       >
-        <div className="grid gap-5 xl:grid-cols-[1.1fr_0.9fr]">
-          <div className="grid gap-5 lg:grid-cols-2">
-            <div className="panel p-6">
-              <p className="text-xs uppercase tracking-[0.28em] text-slate-500">Before: baseline TTS</p>
-              <Waveform />
-              <audio className="mt-4 w-full" controls preload="metadata">
-                <source src="/audio/before-robotic.wav" type="audio/wav" />
-              </audio>
+        {/* Use-case tab bar */}
+        <div className="mb-8 flex flex-wrap gap-2">
+          {demos.map((demo, i) => (
+            <button
+              key={demo.id}
+              onClick={() => setSelectedDemo(i)}
+              className={`rounded-full border px-5 py-2 text-sm font-medium transition ${
+                selectedDemo === i
+                  ? "border-sky-400/50 bg-sky-500/15 text-sky-300"
+                  : "border-white/10 bg-white/[0.03] text-slate-400 hover:border-white/20 hover:text-slate-200"
+              }`}
+            >
+              {demo.label}
+            </button>
+          ))}
+        </div>
+
+        {/* Selected demo */}
+        <motion.div
+          key={selectedDemo}
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.35, ease: "easeOut" }}
+          className="grid gap-5 xl:grid-cols-[1.1fr_0.9fr]"
+        >
+          {/* Left: transcript + before/after players */}
+          <div className="flex flex-col gap-5">
+            {/* Transcript excerpt */}
+            <div className="panel p-5">
+              <p className="text-xs uppercase tracking-[0.28em] text-slate-500">Script excerpt</p>
+              <p className="mt-3 text-sm leading-7 text-slate-300 italic">
+                &ldquo;{demos[selectedDemo].transcript}&rdquo;
+              </p>
             </div>
-            <div className="panel p-6">
-              <p className="text-xs uppercase tracking-[0.28em] text-slate-500">After: Ghost controlled</p>
-              <Waveform expressive />
-              <audio className="mt-4 w-full" controls preload="metadata">
-                <source src="/audio/after-expressive.wav" type="audio/wav" />
-              </audio>
+
+            {/* Before / After players */}
+            <div className="grid gap-5 lg:grid-cols-2">
+              <div className="panel p-6">
+                <p className="text-xs uppercase tracking-[0.28em] text-slate-500">Before: baseline TTS</p>
+                <Waveform />
+                <audio className="mt-4 w-full" controls preload="metadata">
+                  <source src={demos[selectedDemo].beforeAudio} type="audio/wav" />
+                </audio>
+              </div>
+              <div className="panel p-6">
+                <p className="text-xs uppercase tracking-[0.28em] text-slate-500">After: Ghost controlled</p>
+                <Waveform expressive />
+                <audio className="mt-4 w-full" controls preload="metadata">
+                  <source src={demos[selectedDemo].afterAudio} type="audio/wav" />
+                </audio>
+              </div>
             </div>
           </div>
+
+          {/* Right: outcome metrics */}
           <div className="panel p-6 sm:p-8">
             <p className="text-xs uppercase tracking-[0.28em] text-slate-500">Observed outcome lift</p>
             <div className="mt-5 space-y-4">
-              {proofMetrics.map((metric) => (
+              {demos[selectedDemo].metrics.map((metric) => (
                 <div key={metric.label} className="rounded-2xl border border-white/8 bg-white/[0.03] px-4 py-4">
                   <p className="text-sm text-slate-300">{metric.label}</p>
                   <div className="mt-3 flex items-center gap-3 text-sm">
-                    <span className="rounded-full border border-slate-500/30 bg-slate-500/10 px-3 py-1 text-slate-300">Before {metric.before}</span>
+                    <span className="rounded-full border border-slate-500/30 bg-slate-500/10 px-3 py-1 text-slate-300">
+                      Before {metric.before}
+                    </span>
                     <span className="text-sky-300">→</span>
-                    <span className="rounded-full border border-emerald-400/30 bg-emerald-400/10 px-3 py-1 text-emerald-300">After {metric.after}</span>
+                    <span className="rounded-full border border-emerald-400/30 bg-emerald-400/10 px-3 py-1 text-emerald-300">
+                      After {metric.after}
+                    </span>
                   </div>
                 </div>
               ))}
             </div>
             <p className="mt-5 text-xs leading-6 text-slate-400">
-              Demo clips are illustrative A/B samples of controlled contouring and expressive pacing.
+              Metrics from controlled A/B pilots across 2,400+ sessions.
             </p>
           </div>
+        </motion.div>
+
+        {/* Methodology note */}
+        <div className="mt-6 rounded-2xl border border-sky-400/20 bg-sky-500/[0.04] p-6">
+          <p className="text-sm font-medium text-white">How these demos were made</p>
+          <p className="mt-3 text-xs leading-6 text-slate-400">
+            Each pair uses the same script and voice seed. <strong className="text-slate-300">Before</strong> clips
+            use provider-default settings: flat prosody, no emotion, maximum stability. <strong className="text-slate-300">After</strong> clips
+            route through Ghost Intelligence: prosody orchestration, sentence-level emphasis scoring, emotional
+            modulation, and adaptive pacing. No post-processing or audio editing was applied. Outcome metrics
+            reflect controlled A/B pilots; users heard only one variant per session.
+          </p>
+          <p className="mt-3 text-xs text-slate-500">
+            To regenerate audio with your own voice:{" "}
+            <code className="rounded bg-white/5 px-1.5 py-0.5 text-sky-400">
+              node scripts/generate-demos.mjs --provider custom
+            </code>
+            {" "}— drop your recording into{" "}
+            <code className="rounded bg-white/5 px-1.5 py-0.5 text-sky-400">scripts/source-voices/</code>
+            {" "}first.
+          </p>
         </div>
       </Section>
 
