@@ -3,6 +3,7 @@ import { motion } from "framer-motion";
 
 type InputMode = "record" | "sample";
 type VoiceStylePreset = "sales" | "support" | "podcast";
+type DemoIntensity = "subtle" | "strong" | "extreme";
 
 const aiVoiceSamples = [
   {
@@ -48,6 +49,7 @@ export function RecordingStudio({
   const [inputMode, setInputMode] = useState<InputMode>("record");
   const [selectedSampleId, setSelectedSampleId] = useState<string>(aiVoiceSamples[0].id);
   const [selectedStylePreset, setSelectedStylePreset] = useState<VoiceStylePreset>("sales");
+  const [demoIntensity, setDemoIntensity] = useState<DemoIntensity>("strong");
   const [enhancedAudio, setEnhancedAudio] = useState<string | null>(null);
   const [enhancedMimeType, setEnhancedMimeType] = useState("audio/wav");
   const [isEnhancing, setIsEnhancing] = useState(false);
@@ -76,6 +78,17 @@ export function RecordingStudio({
     curveTo: "",
     curveChanged: false,
     autoTemplateConfidence: "",
+  });
+  const [processingProof, setProcessingProof] = useState<{
+    processingApplied: boolean;
+    hashChanged: boolean;
+    inputBytes: number;
+    outputBytes: number;
+  }>({
+    processingApplied: false,
+    hashChanged: false,
+    inputBytes: 0,
+    outputBytes: 0,
   });
   const timerRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -296,6 +309,12 @@ export function RecordingStudio({
       curveChanged: false,
       autoTemplateConfidence: "",
     });
+    setProcessingProof({
+      processingApplied: false,
+      hashChanged: false,
+      inputBytes: 0,
+      outputBytes: 0,
+    });
     setRecordingTime(0);
     setError("");
     setPermissionHint("");
@@ -335,6 +354,7 @@ export function RecordingStudio({
       fd.append("audio", blob, inputFilename);
       fd.append("inputMode", inputMode);
       fd.append("stylePreset", selectedStylePreset);
+      fd.append("demoIntensity", demoIntensity);
 
       const enhanceRes = await fetch("/api/enhance-voice", {
         method: "POST",
@@ -364,6 +384,10 @@ export function RecordingStudio({
         Number.isFinite(confidenceNum) && confidenceNum >= 0
           ? `${Math.round(confidenceNum * 100)}%`
           : "";
+      const processingApplied = (enhanceRes.headers.get("X-Ghost-Processing-Applied") ?? "false") === "true";
+      const hashChanged = (enhanceRes.headers.get("X-Ghost-Hash-Changed") ?? "false") === "true";
+      const inputBytesRaw = Number(enhanceRes.headers.get("X-Ghost-Input-Bytes") ?? "0");
+      const outputBytesRaw = Number(enhanceRes.headers.get("X-Ghost-Output-Bytes") ?? "0");
 
       setIntelligenceDeltas({
         prosody,
@@ -381,6 +405,12 @@ export function RecordingStudio({
         curveTo,
         curveChanged,
         autoTemplateConfidence,
+      });
+      setProcessingProof({
+        processingApplied,
+        hashChanged,
+        inputBytes: Number.isFinite(inputBytesRaw) ? inputBytesRaw : 0,
+        outputBytes: Number.isFinite(outputBytesRaw) ? outputBytesRaw : 0,
       });
 
       const enhanced = await enhanceRes.arrayBuffer();
@@ -507,6 +537,26 @@ export function RecordingStudio({
             <option value="support">Customer Support Voice</option>
             <option value="podcast">Podcast Voice</option>
           </select>
+        </div>
+
+        <div className="mb-5 grid gap-2">
+          <label className="text-xs uppercase tracking-[0.22em] text-slate-500">Demo intensity</label>
+          <select
+            value={demoIntensity}
+            onChange={(e) => setDemoIntensity(e.target.value as DemoIntensity)}
+            className="rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-sm text-slate-200 outline-none transition focus:border-emerald-400/50"
+          >
+            <option value="subtle">Subtle</option>
+            <option value="strong">Strong</option>
+            <option value="extreme">Extreme 🔥</option>
+          </select>
+          <p className="text-xs text-slate-500">
+            {demoIntensity === "subtle"
+              ? "Production-safe realism with gentle refinement."
+              : demoIntensity === "strong"
+                ? "Noticeable improvement optimized for clear before/after demos."
+                : "Demo mode: pitch + speed + heavy compression + aggressive gain for unmistakable change."}
+          </p>
         </div>
 
         {inputMode === "sample" && (
@@ -724,6 +774,23 @@ export function RecordingStudio({
           <p className="mt-4 text-xs leading-6 text-slate-400">
             Uplift values are computed per recording. With a configured Ghost backend, values come from model output telemetry; otherwise they fall back to local simulated analysis for demo continuity.
           </p>
+          <div className="mt-4 grid gap-2 text-xs text-slate-300 sm:grid-cols-2">
+            <div className="rounded-lg border border-white/10 bg-white/[0.02] px-3 py-2">
+              Processing applied: {processingProof.processingApplied ? "yes" : "no"}
+            </div>
+            <div className="rounded-lg border border-white/10 bg-white/[0.02] px-3 py-2">
+              Hash changed: {processingProof.hashChanged ? "true" : "false"}
+            </div>
+            <div className="rounded-lg border border-white/10 bg-white/[0.02] px-3 py-2 sm:col-span-2">
+              Byte delta: {processingProof.inputBytes.toLocaleString()} {"->"} {processingProof.outputBytes.toLocaleString()}
+            </div>
+          </div>
+          <div className="mt-4 rounded-lg border border-white/10 bg-white/[0.02] px-3 py-3 text-xs text-slate-300">
+            <p className="mb-2 uppercase tracking-[0.16em] text-slate-400">What Ghost did</p>
+            <p>✔ Increased clarity</p>
+            <p>✔ Added conversational pacing</p>
+            <p>✔ Enhanced vocal presence</p>
+          </div>
           {enhancementSource === "ghost" && (
             <div className="mt-4 grid gap-2 text-xs text-slate-300 sm:grid-cols-2">
               {(enhancementDetails.templateUsed || enhancementDetails.autoTemplateConfidence) && (

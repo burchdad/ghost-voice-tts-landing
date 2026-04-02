@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { createHash } from "crypto";
 
 /**
  * POST /api/enhance-voice
@@ -43,6 +44,7 @@ export async function POST(req: NextRequest) {
     const audioFile = formData.get("audio") as File;
     const inputMode = normalizeInputMode(formData.get("inputMode"));
     const stylePreset = normalizeStylePreset(formData.get("stylePreset"));
+    const demoIntensity = normalizeDemoIntensity(formData.get("demoIntensity"));
 
     if (!audioFile) {
       return NextResponse.json({ error: "No audio file provided" }, { status: 400 });
@@ -51,9 +53,13 @@ export async function POST(req: NextRequest) {
     const buffer = await audioFile.arrayBuffer();
     const wavBytes = new Uint8Array(buffer);
 
-    const remoteResult = await tryGhostEnhancement(audioFile, wavBytes, inputMode, stylePreset);
-    const result = remoteResult ?? enhanceAudioBuffer(wavBytes, audioFile.type || "audio/wav", stylePreset);
+    const remoteResult = await tryGhostEnhancement(audioFile, wavBytes, inputMode, stylePreset, demoIntensity);
+    const result =
+      remoteResult ?? enhanceAudioBuffer(wavBytes, audioFile.type || "audio/wav", inputMode, stylePreset, demoIntensity);
     const { audio, deltas, source, details, contentType } = result;
+    const inputHash = hashBytes(wavBytes);
+    const outputHash = hashBytes(audio);
+    const hashChanged = inputHash !== outputHash;
 
     return new NextResponse(Buffer.from(audio), {
       status: 200,
@@ -67,6 +73,11 @@ export async function POST(req: NextRequest) {
         "X-Ghost-Source": source,
         "X-Ghost-Input-Mode": inputMode,
         "X-Ghost-Requested-Preset": stylePreset,
+        "X-Ghost-Demo-Intensity": demoIntensity,
+        "X-Ghost-Processing-Applied": String(hashChanged),
+        "X-Ghost-Hash-Changed": String(hashChanged),
+        "X-Ghost-Input-Bytes": String(wavBytes.byteLength),
+        "X-Ghost-Output-Bytes": String(audio.byteLength),
         "X-Ghost-Template-Used": details.templateUsed ?? "",
         "X-Ghost-Emotion-From": details.emotionFrom ?? "",
         "X-Ghost-Emotion-To": details.emotionTo ?? "",
@@ -84,8 +95,13 @@ export async function POST(req: NextRequest) {
   }
 }
 
+function hashBytes(bytes: Uint8Array): string {
+  return createHash("sha1").update(Buffer.from(bytes)).digest("hex");
+}
+
 type InputMode = "record" | "sample";
 type StylePreset = "sales" | "support" | "podcast";
+type DemoIntensity = "subtle" | "strong" | "extreme";
 
 function normalizeInputMode(value: FormDataEntryValue | null): InputMode {
   return value === "sample" ? "sample" : "record";
@@ -97,11 +113,18 @@ function normalizeStylePreset(value: FormDataEntryValue | null): StylePreset {
   return "sales";
 }
 
+function normalizeDemoIntensity(value: FormDataEntryValue | null): DemoIntensity {
+  if (value === "subtle") return "subtle";
+  if (value === "extreme") return "extreme";
+  return "strong";
+}
+
 async function tryGhostEnhancement(
   audioFile: File,
   wavData: Uint8Array,
   inputMode: InputMode,
-  stylePreset: StylePreset
+  stylePreset: StylePreset,
+  demoIntensity: DemoIntensity
 ): Promise<EnhancementResult | null> {
   const enhanceUrl = process.env.GHOST_ENHANCE_URL;
   if (!enhanceUrl) {
@@ -117,6 +140,7 @@ async function tryGhostEnhancement(
     fd.append("audio", new Blob([Buffer.from(wavData)], { type: mime }), audioFile.name || "recording.wav");
     fd.append("inputMode", inputMode);
     fd.append("stylePreset", stylePreset);
+    fd.append("demoIntensity", demoIntensity);
 
     const response = await fetch(enhanceUrl, {
       method: "POST",
@@ -352,7 +376,77 @@ function clampFloat(value: number, min: number, max: number): number {
  *
  * This is a placeholder simulation. In production, route to actual Ghost layer.
  */
-function enhanceAudioBuffer(wavData: Uint8Array, inputMimeType: string, stylePreset: StylePreset): EnhancementResult {
+type TransformProfile = {
+  speedBase: number;
+  speedSwing: number;
+  emphasisBoost: number;
+  compressorThreshold: number;
+  compressorRatio: number;
+  makeupGain: number;
+  pitchShift: number;
+};
+
+function getTransformProfile(
+  inputMode: InputMode,
+  preset: StylePreset,
+  intensity: DemoIntensity
+): TransformProfile {
+  if (intensity === "extreme") {
+    return {
+      speedBase: 1.12,
+      speedSwing: 0.14,
+      emphasisBoost: 1.8,
+      compressorThreshold: 0.42,
+      compressorRatio: 6.5,
+      makeupGain: 1.65,
+      pitchShift: 1.15,
+    };
+  }
+
+  const isDemo = inputMode === "sample" || intensity === "strong";
+
+  if (preset === "support") {
+    return {
+      speedBase: isDemo ? 1.03 : 1.0,
+      speedSwing: isDemo ? 0.09 : 0.05,
+      emphasisBoost: isDemo ? 1.3 : 1,
+      compressorThreshold: isDemo ? 0.52 : 0.58,
+      compressorRatio: isDemo ? 4.8 : 3.8,
+      makeupGain: isDemo ? 1.3 : 1.12,
+      pitchShift: isDemo ? 1.06 : 1.01,
+    };
+  }
+
+  if (preset === "podcast") {
+    return {
+      speedBase: isDemo ? 1.08 : 1.03,
+      speedSwing: isDemo ? 0.11 : 0.06,
+      emphasisBoost: isDemo ? 1.45 : 1.12,
+      compressorThreshold: isDemo ? 0.48 : 0.55,
+      compressorRatio: isDemo ? 5.2 : 4.0,
+      makeupGain: isDemo ? 1.4 : 1.16,
+      pitchShift: isDemo ? 1.08 : 1.02,
+    };
+  }
+
+  return {
+    speedBase: isDemo ? 1.1 : 1.04,
+    speedSwing: isDemo ? 0.12 : 0.06,
+    emphasisBoost: isDemo ? 1.55 : 1.15,
+    compressorThreshold: isDemo ? 0.46 : 0.54,
+    compressorRatio: isDemo ? 5.6 : 4.2,
+    makeupGain: isDemo ? 1.45 : 1.2,
+    pitchShift: isDemo ? 1.1 : 1.03,
+  };
+}
+
+function enhanceAudioBuffer(
+  wavData: Uint8Array,
+  inputMimeType: string,
+  inputMode: InputMode,
+  stylePreset: StylePreset,
+  demoIntensity: DemoIntensity
+): EnhancementResult {
   try {
     // Parse WAV header
     const dataView = new DataView(wavData.buffer, wavData.byteOffset);
@@ -404,7 +498,8 @@ function enhanceAudioBuffer(wavData: Uint8Array, inputMimeType: string, stylePre
     }
 
     // Apply enhancement: time-stretch + pitch modulation + compression
-    const enhanced = applyProsodyEnhancement(samples, sampleRate);
+    const profile = getTransformProfile(inputMode, stylePreset, demoIntensity);
+    const enhanced = applyProsodyEnhancement(samples, sampleRate, profile);
     const deltas = applyStylePresetToDeltas(calculateIntelligenceDeltas(samples, enhanced, sampleRate), stylePreset);
 
     // Re-encode to WAV
@@ -570,12 +665,16 @@ function clampInt(value: number, min: number, max: number): number {
 /**
  * Apply prosody enhancement: variable playback speed + pitch shifts + compression.
  */
-function applyProsodyEnhancement(samples: Float32Array, sampleRate: number): Float32Array {
+function applyProsodyEnhancement(
+  samples: Float32Array,
+  sampleRate: number,
+  profile: TransformProfile
+): Float32Array {
   const duration = samples.length / sampleRate;
   const enhanced = new Float32Array(samples.length);
 
   // Phase 1: Time-stretch with varying speed (simulates pacing variation)
-  const speedEnvelope = getSpeedEnvelope(duration);
+  const speedEnvelope = getSpeedEnvelope(duration, profile);
   let readPos = 0;
   let writePos = 0;
 
@@ -594,50 +693,82 @@ function applyProsodyEnhancement(samples: Float32Array, sampleRate: number): Flo
   }
 
   // Phase 2: Dynamic range compression (smooth delivery)
-  const compressed = compressAudio(enhanced.slice(0, writePos));
+  const compressed = compressAudio(enhanced.slice(0, writePos), sampleRate, profile);
+
+  // Phase 2.25: Lightweight pitch shift to make intensity modes audibly distinct.
+  const pitched = applyPitchShift(compressed, profile.pitchShift);
+
+  // Phase 2.5: Add makeup gain for a more obvious but controlled transformation.
+  for (let i = 0; i < pitched.length; i++) {
+    pitched[i] *= profile.makeupGain;
+  }
 
   // Phase 3: Normalize to [-1, 1]
   let maxVal = 0;
-  for (let i = 0; i < compressed.length; i++) {
-    if (Math.abs(compressed[i]) > maxVal) maxVal = Math.abs(compressed[i]);
+  for (let i = 0; i < pitched.length; i++) {
+    if (Math.abs(pitched[i]) > maxVal) maxVal = Math.abs(pitched[i]);
   }
   if (maxVal > 0) {
-    for (let i = 0; i < compressed.length; i++) {
-      compressed[i] *= 0.95 / maxVal;
+    for (let i = 0; i < pitched.length; i++) {
+      pitched[i] *= 0.95 / maxVal;
     }
   }
 
-  return compressed;
+  return pitched;
+}
+
+function applyPitchShift(samples: Float32Array, factor: number): Float32Array {
+  if (Math.abs(factor - 1) < 0.001) {
+    return samples;
+  }
+
+  const shifted = new Float32Array(samples.length);
+  let readPos = 0;
+
+  for (let i = 0; i < shifted.length; i++) {
+    const idx = Math.floor(readPos);
+    const next = Math.min(idx + 1, samples.length - 1);
+    const frac = readPos - idx;
+
+    if (idx >= samples.length) {
+      shifted[i] = samples[samples.length - 1] ?? 0;
+    } else {
+      shifted[i] = samples[idx] * (1 - frac) + samples[next] * frac;
+    }
+
+    readPos += factor;
+  }
+
+  return shifted;
 }
 
 /**
  * Generate a speed envelope: starts normal, accelerates in the middle, 
  * then has slight emphasis peaks (simulating prosody).
  */
-function getSpeedEnvelope(duration: number): (t: number) => number {
+function getSpeedEnvelope(duration: number, profile: TransformProfile): (t: number) => number {
   return (t: number) => {
     const progress = t / duration;
-    // Base: mostly 1.0, with slight variations
-    let speed = 0.98 + Math.sin(progress * Math.PI * 3) * 0.04;
+    // Base speed with sinusoidal variation.
+    let speed = profile.speedBase + Math.sin(progress * Math.PI * 3) * profile.speedSwing;
 
     // Emphasis peaks at 30%, 60%, 90% (question rises)
-    const emphasis1 = Math.max(0, Math.sin((progress - 0.25) * Math.PI * 1.4) * 0.06);
-    const emphasis2 = Math.max(0, Math.sin((progress - 0.55) * Math.PI * 1.4) * 0.06);
-    const emphasis3 = Math.max(0, Math.sin((progress - 0.85) * Math.PI * 1.0) * 0.08);
+    const emphasis1 = Math.max(0, Math.sin((progress - 0.25) * Math.PI * 1.4) * 0.06 * profile.emphasisBoost);
+    const emphasis2 = Math.max(0, Math.sin((progress - 0.55) * Math.PI * 1.4) * 0.06 * profile.emphasisBoost);
+    const emphasis3 = Math.max(0, Math.sin((progress - 0.85) * Math.PI * 1.0) * 0.08 * profile.emphasisBoost);
 
-    return speed + emphasis1 + emphasis2 + emphasis3;
+    return clampFloat(speed + emphasis1 + emphasis2 + emphasis3, 0.75, 1.35);
   };
 }
 
 /**
  * Apply simple dynamic range compression: reduce loud peaks, boost quiet parts.
  */
-function compressAudio(samples: Float32Array): Float32Array {
-  const threshold = 0.6;
-  const ratio = 4;
+function compressAudio(samples: Float32Array, sampleRate: number, profile: TransformProfile): Float32Array {
+  const threshold = profile.compressorThreshold;
+  const ratio = profile.compressorRatio;
   const attackMs = 5;
   const releaseMs = 50;
-  const sampleRate = 16000; // Assume 16kHz
 
   const attackSamples = Math.round((attackMs * sampleRate) / 1000);
   const releaseSamples = Math.round((releaseMs * sampleRate) / 1000);
