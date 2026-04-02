@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import type { ReactNode } from "react";
 import { BackgroundScene } from "@/components/background-scene";
+import { RecordingStudio } from "@/components/recording-studio";
 
 const pillars = [
   {
@@ -385,6 +386,7 @@ function ContactModal({
 export function LandingPage() {
   const [isContactOpen, setIsContactOpen] = useState(false);
   const [selectedDemo, setSelectedDemo] = useState(0);
+  const [isStudioMode, setIsStudioMode] = useState(false);
 
   return (
     <>
@@ -683,12 +685,25 @@ export function LandingPage() {
       >
         {/* Use-case tab bar */}
         <div className="mb-8 flex flex-wrap gap-2">
+          <button
+            onClick={() => setIsStudioMode(true)}
+            className={`rounded-full border px-5 py-2 text-sm font-medium transition ${
+              isStudioMode
+                ? "border-fuchsia-400/50 bg-fuchsia-500/15 text-fuchsia-300"
+                : "border-white/10 bg-white/[0.03] text-slate-400 hover:border-white/20 hover:text-slate-200"
+            }`}
+          >
+            🎙️ Recording Studio
+          </button>
           {demos.map((demo, i) => (
             <button
               key={demo.id}
-              onClick={() => setSelectedDemo(i)}
+              onClick={() => {
+                setSelectedDemo(i);
+                setIsStudioMode(false);
+              }}
               className={`rounded-full border px-5 py-2 text-sm font-medium transition ${
-                selectedDemo === i
+                !isStudioMode && selectedDemo === i
                   ? "border-sky-400/50 bg-sky-500/15 text-sky-300"
                   : "border-white/10 bg-white/[0.03] text-slate-400 hover:border-white/20 hover:text-slate-200"
               }`}
@@ -698,86 +713,97 @@ export function LandingPage() {
           ))}
         </div>
 
-        {/* Selected demo */}
-        <motion.div
-          key={selectedDemo}
-          initial={{ opacity: 0, y: 12 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.35, ease: "easeOut" }}
-          className="grid gap-5 xl:grid-cols-[1.1fr_0.9fr]"
-        >
-          {/* Left: transcript + before/after players */}
-          <div className="flex flex-col gap-5">
-            {/* Transcript excerpt */}
-            <div className="panel p-5">
-              <p className="text-xs uppercase tracking-[0.28em] text-slate-500">Script excerpt</p>
-              <p className="mt-3 text-sm leading-7 text-slate-300 italic">
-                &ldquo;{demos[selectedDemo].transcript}&rdquo;
+        {/* Studio mode or demo showcase */}
+        {isStudioMode ? (
+          <RecordingStudio />
+        ) : (
+          <motion.div
+            key={selectedDemo}
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.35, ease: "easeOut" }}
+            className="grid gap-5 xl:grid-cols-[1.1fr_0.9fr]"
+          >
+            {/* Left: transcript + before/after players */}
+            <div className="flex flex-col gap-5">
+              {/* Transcript excerpt */}
+              <div className="panel p-5">
+                <p className="text-xs uppercase tracking-[0.28em] text-slate-500">Script excerpt</p>
+                <p className="mt-3 text-sm leading-7 text-slate-300 italic">
+                  &ldquo;{demos[selectedDemo].transcript}&rdquo;
+                </p>
+              </div>
+
+              {/* Before / After players */}
+              <div className="grid gap-5 lg:grid-cols-2">
+                <div className="panel p-6">
+                  <p className="text-xs uppercase tracking-[0.28em] text-slate-500">Before: baseline TTS</p>
+                  <Waveform />
+                  <audio className="mt-4 w-full" controls preload="metadata">
+                    <source src={demos[selectedDemo].beforeAudio} type="audio/wav" />
+                  </audio>
+                </div>
+                <div className="panel p-6">
+                  <p className="text-xs uppercase tracking-[0.28em] text-slate-500">After: Ghost controlled</p>
+                  <Waveform expressive />
+                  <audio className="mt-4 w-full" controls preload="metadata">
+                    <source src={demos[selectedDemo].afterAudio} type="audio/wav" />
+                  </audio>
+                </div>
+              </div>
+            </div>
+
+            {/* Right: outcome metrics */}
+            <div className="panel p-6 sm:p-8">
+              <p className="text-xs uppercase tracking-[0.28em] text-slate-500">Observed outcome lift</p>
+              <div className="mt-5 space-y-4">
+                {demos[selectedDemo].metrics.map((metric) => (
+                  <div key={metric.label} className="rounded-2xl border border-white/8 bg-white/[0.03] px-4 py-4">
+                    <p className="text-sm text-slate-300">{metric.label}</p>
+                    <div className="mt-3 flex items-center gap-3 text-sm">
+                      <span className="rounded-full border border-slate-500/30 bg-slate-500/10 px-3 py-1 text-slate-300">
+                        Before {metric.before}
+                      </span>
+                      <span className="text-sky-300">→</span>
+                      <span className="rounded-full border border-emerald-400/30 bg-emerald-400/10 px-3 py-1 text-emerald-300">
+                        After {metric.after}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <p className="mt-5 text-xs leading-6 text-slate-400">
+                Metrics from controlled A/B pilots across 2,400+ sessions.
               </p>
             </div>
-
-            {/* Before / After players */}
-            <div className="grid gap-5 lg:grid-cols-2">
-              <div className="panel p-6">
-                <p className="text-xs uppercase tracking-[0.28em] text-slate-500">Before: baseline TTS</p>
-                <Waveform />
-                <audio className="mt-4 w-full" controls preload="metadata">
-                  <source src={demos[selectedDemo].beforeAudio} type="audio/wav" />
-                </audio>
-              </div>
-              <div className="panel p-6">
-                <p className="text-xs uppercase tracking-[0.28em] text-slate-500">After: Ghost controlled</p>
-                <Waveform expressive />
-                <audio className="mt-4 w-full" controls preload="metadata">
-                  <source src={demos[selectedDemo].afterAudio} type="audio/wav" />
-                </audio>
-              </div>
-            </div>
-          </div>
-
-          {/* Right: outcome metrics */}
-          <div className="panel p-6 sm:p-8">
-            <p className="text-xs uppercase tracking-[0.28em] text-slate-500">Observed outcome lift</p>
-            <div className="mt-5 space-y-4">
-              {demos[selectedDemo].metrics.map((metric) => (
-                <div key={metric.label} className="rounded-2xl border border-white/8 bg-white/[0.03] px-4 py-4">
-                  <p className="text-sm text-slate-300">{metric.label}</p>
-                  <div className="mt-3 flex items-center gap-3 text-sm">
-                    <span className="rounded-full border border-slate-500/30 bg-slate-500/10 px-3 py-1 text-slate-300">
-                      Before {metric.before}
-                    </span>
-                    <span className="text-sky-300">→</span>
-                    <span className="rounded-full border border-emerald-400/30 bg-emerald-400/10 px-3 py-1 text-emerald-300">
-                      After {metric.after}
-                    </span>
-                  </div>
-                </div>
-              ))}
-            </div>
-            <p className="mt-5 text-xs leading-6 text-slate-400">
-              Metrics from controlled A/B pilots across 2,400+ sessions.
-            </p>
-          </div>
-        </motion.div>
+          </motion.div>
+        )}
 
         {/* Methodology note */}
         <div className="mt-6 rounded-2xl border border-sky-400/20 bg-sky-500/[0.04] p-6">
-          <p className="text-sm font-medium text-white">How these demos were made</p>
-          <p className="mt-3 text-xs leading-6 text-slate-400">
-            Each pair uses the same script and voice seed. <strong className="text-slate-300">Before</strong> clips
-            use provider-default settings: flat prosody, no emotion, maximum stability. <strong className="text-slate-300">After</strong> clips
-            route through Ghost Intelligence: prosody orchestration, sentence-level emphasis scoring, emotional
-            modulation, and adaptive pacing. No post-processing or audio editing was applied. Outcome metrics
-            reflect controlled A/B pilots; users heard only one variant per session.
+          <p className="text-sm font-medium text-white">
+            {isStudioMode ? "Recording Studio — How it works" : "How these demos were made"}
           </p>
-          <p className="mt-3 text-xs text-slate-500">
-            To regenerate audio with your own voice:{" "}
-            <code className="rounded bg-white/5 px-1.5 py-0.5 text-sky-400">
-              node scripts/generate-demos.mjs --provider custom
-            </code>
-            {" "}— drop your recording into{" "}
-            <code className="rounded bg-white/5 px-1.5 py-0.5 text-sky-400">scripts/source-voices/</code>
-            {" "}first.
+          <p className="mt-3 text-xs leading-6 text-slate-400">
+            {isStudioMode ? (
+              <>
+                Record your own voice, then click{" "}
+                <strong className="text-slate-300">Generate Enhanced Version</strong> to hear what happens when
+                Ghost Intelligence processes your delivery. This sends your audio through our prosody engine:{" "}
+                <strong className="text-slate-300">pitch orchestration, emphasis scoring, and pacing optimization</strong>
+                . Compare side-by-side to hear the lift in naturalness, credibility, and engagement.
+              </>
+            ) : (
+              <>
+                Each pair uses the same script and voice seed.{" "}
+                <strong className="text-slate-300">Before</strong> clips use provider-default settings: flat prosody, no
+                emotion, maximum stability.{" "}
+                <strong className="text-slate-300">After</strong> clips route through Ghost
+                Intelligence: prosody orchestration, sentence-level emphasis scoring, emotional modulation, and adaptive
+                pacing. No post-processing or audio editing was applied. Outcome metrics reflect controlled A/B pilots;
+                users heard only one variant per session.
+              </>
+            )}
           </p>
         </div>
       </Section>
