@@ -419,14 +419,14 @@ export function LandingPage() {
           <BackgroundScene />
           <div className="relative z-10 grid gap-12 lg:grid-cols-[1.15fr_0.85fr] lg:items-end">
             <div className="max-w-3xl">
-              <span className="eyebrow">Voice infrastructure for adaptive AI systems</span>
+              <span className="eyebrow">Voice intelligence layer for AI systems</span>
               <motion.h1
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.65, ease: "easeOut" }}
                 className="mt-6 text-4xl font-semibold tracking-tight text-white sm:text-6xl lg:text-7xl"
               >
-                The Intelligence Layer Behind Human-Like AI Voice
+                Your AI sounds robotic. We fix that.
               </motion.h1>
               <motion.p
                 initial={{ opacity: 0, y: 20 }}
@@ -434,8 +434,7 @@ export function LandingPage() {
                 transition={{ duration: 0.75, delay: 0.08, ease: "easeOut" }}
                 className="mt-6 max-w-2xl text-base leading-8 text-slate-300 sm:text-lg"
               >
-                Ghost Voice Intelligence transforms how machines speak — controlling prosody,
-                emotion, timing, and continuous learning across every interaction.
+                Upload any voice, watch it transform, and see proof in real time.
               </motion.p>
               <motion.div
                 initial={{ opacity: 0, y: 20 }}
@@ -680,8 +679,8 @@ export function LandingPage() {
 
       <Section
         eyebrow="Demo"
-        title="Proof: Same script. Same voice. Different delivery."
-        copy="Every pair below was synthesised from an identical script with an identical voice seed. The only variable is whether Ghost Intelligence is in the loop."
+        title="Proof: Same script. Same voice. Different outcome."
+        copy="We do not simulate improvement. We prove it. The only variable below is whether Ghost Intelligence is in the loop."
       >
         {/* Use-case tab bar */}
         <div className="mb-8 flex flex-wrap gap-2">
@@ -787,11 +786,10 @@ export function LandingPage() {
           <p className="mt-3 text-xs leading-6 text-slate-400">
             {isStudioMode ? (
               <>
-                Record your own voice, then click{" "}
-                <strong className="text-slate-300">Generate Enhanced Version</strong> to hear what happens when
-                Ghost Intelligence processes your delivery. This sends your audio through our prosody engine:{" "}
-                <strong className="text-slate-300">pitch orchestration, emphasis scoring, and pacing optimization</strong>
-                . This is presented as an intelligence layer with measurable deltas, not a cosmetic voice filter.
+                Record your own voice or select an AI sample, then click{" "}
+                <strong className="text-slate-300">Generate Ghost Intelligence Pass</strong>. You can toggle before and
+                after, inspect measurable deltas, and verify that processing was applied. We do not simulate
+                improvement - we prove it.
               </>
             ) : (
               <>
