@@ -1,6 +1,36 @@
 import { useEffect, useRef, useState } from "react";
 import { motion } from "framer-motion";
 
+type InputMode = "record" | "sample";
+type VoiceStylePreset = "sales" | "support" | "podcast";
+
+const aiVoiceSamples = [
+  {
+    id: "robotic-sales",
+    label: "AI Voice 1 - Robotic Sales",
+    description: "Flat robotic delivery for outreach.",
+    src: "/audio/ai-voice-1.mp3",
+  },
+  {
+    id: "neutral-sales",
+    label: "AI Voice 2 - Neutral Sales",
+    description: "Neutral delivery with basic pacing.",
+    src: "/audio/ai-voice-2.mp3",
+  },
+  {
+    id: "emotional-sales",
+    label: "AI Voice 3 - Slightly Emotional Sales",
+    description: "Mildly expressive version of the same script.",
+    src: "/audio/ai-voice-3.mp3",
+  },
+  {
+    id: "alt-sales",
+    label: "AI Voice 4 - Alternate Sales",
+    description: "Alternate synthetic take for A/B demo.",
+    src: "/audio/ai-voice-4.mp3",
+  },
+] as const;
+
 export function RecordingStudio({
   onRecordingComplete,
 }: {
@@ -15,7 +45,11 @@ export function RecordingStudio({
   const [hasRecording, setHasRecording] = useState(false);
   const [recordedAudioUrl, setRecordedAudioUrl] = useState<string | null>(null);
   const [recordedMimeType, setRecordedMimeType] = useState("audio/webm");
+  const [inputMode, setInputMode] = useState<InputMode>("record");
+  const [selectedSampleId, setSelectedSampleId] = useState<string>(aiVoiceSamples[0].id);
+  const [selectedStylePreset, setSelectedStylePreset] = useState<VoiceStylePreset>("sales");
   const [enhancedAudio, setEnhancedAudio] = useState<string | null>(null);
+  const [enhancedMimeType, setEnhancedMimeType] = useState("audio/wav");
   const [isEnhancing, setIsEnhancing] = useState(false);
   const [error, setError] = useState("");
   const [permissionHint, setPermissionHint] = useState("");
@@ -70,6 +104,8 @@ export function RecordingStudio({
 
     return "";
   };
+
+  const selectedSample = aiVoiceSamples.find((sample) => sample.id === selectedSampleId) ?? aiVoiceSamples[0];
 
   const refreshMicrophones = async () => {
     if (!navigator.mediaDevices?.enumerateDevices) {
@@ -246,6 +282,7 @@ export function RecordingStudio({
       URL.revokeObjectURL(enhancedAudio);
     }
     setEnhancedAudio(null);
+    setEnhancedMimeType("audio/wav");
 
     setIntelligenceDeltas(defaultDeltas);
     setEnhancementSource("simulated");
@@ -266,19 +303,38 @@ export function RecordingStudio({
 
   // Enhance audio via API
   const enhanceAudio = async () => {
-    if (!recordedAudioUrl) {
-      setError("Record audio first, then generate enhancement.");
-      return;
-    }
-
     setIsEnhancing(true);
     try {
-      const blob = recordedBlobRef.current ?? (await (await fetch(recordedAudioUrl)).blob());
+      let blob: Blob;
+      let inputFilename = "recording.webm";
+
+      if (inputMode === "sample") {
+        const sampleRes = await fetch(selectedSample.src);
+        if (!sampleRes.ok) {
+          throw new Error("Unable to load selected AI sample.");
+        }
+        blob = await sampleRes.blob();
+        const sampleExt = selectedSample.src.split(".").pop() || "mp3";
+        inputFilename = `ai-sample.${sampleExt}`;
+      } else {
+        if (!recordedAudioUrl) {
+          setError("Record audio first, then generate enhancement.");
+          return;
+        }
+        blob = recordedBlobRef.current ?? (await (await fetch(recordedAudioUrl)).blob());
+        const fileExt = recordedMimeType.includes("ogg")
+          ? "ogg"
+          : recordedMimeType.includes("mp4")
+            ? "m4a"
+            : "webm";
+        inputFilename = `recording.${fileExt}`;
+      }
 
       // Call backend enhancement API
       const fd = new FormData();
-      const fileExt = recordedMimeType.includes("ogg") ? "ogg" : recordedMimeType.includes("mp4") ? "m4a" : "webm";
-      fd.append("audio", blob, `recording.${fileExt}`);
+      fd.append("audio", blob, inputFilename);
+      fd.append("inputMode", inputMode);
+      fd.append("stylePreset", selectedStylePreset);
 
       const enhanceRes = await fetch("/api/enhance-voice", {
         method: "POST",
@@ -328,12 +384,14 @@ export function RecordingStudio({
       });
 
       const enhanced = await enhanceRes.arrayBuffer();
+      const contentType = enhanceRes.headers.get("Content-Type") || "audio/wav";
 
       if (enhancedAudio) {
         URL.revokeObjectURL(enhancedAudio);
       }
 
-      const enhancedUrl = URL.createObjectURL(new Blob([enhanced], { type: "audio/wav" }));
+      const enhancedUrl = URL.createObjectURL(new Blob([enhanced], { type: contentType }));
+      setEnhancedMimeType(contentType);
       setEnhancedAudio(enhancedUrl);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Enhancement failed");
@@ -410,8 +468,67 @@ export function RecordingStudio({
 
       {/* Recording controls */}
       <div className="panel p-6">
-        <p className="mb-2 text-xs uppercase tracking-[0.28em] text-slate-500">Step 1: Record</p>
-        <p className="mb-4 text-sm text-slate-300">Say anything - a sales pitch, greeting, or message.</p>
+        <p className="mb-2 text-xs uppercase tracking-[0.28em] text-slate-500">Step 1: Choose input</p>
+        <p className="mb-4 text-sm text-slate-300">Use your microphone or select an AI sample voice with sales wording.</p>
+
+        <div className="mb-5 grid gap-3 md:grid-cols-2">
+          <button
+            onClick={() => setInputMode("record")}
+            className={`rounded-lg border px-4 py-3 text-left transition ${
+              inputMode === "record"
+                ? "border-sky-400/50 bg-sky-500/12 text-sky-200"
+                : "border-white/10 bg-white/[0.03] text-slate-300 hover:border-white/20"
+            }`}
+          >
+            <p className="text-xs uppercase tracking-[0.2em]">Choose Input</p>
+            <p className="mt-1 text-sm font-medium">🎤 Record Yourself</p>
+          </button>
+          <button
+            onClick={() => setInputMode("sample")}
+            className={`rounded-lg border px-4 py-3 text-left transition ${
+              inputMode === "sample"
+                ? "border-fuchsia-400/50 bg-fuchsia-500/12 text-fuchsia-200"
+                : "border-white/10 bg-white/[0.03] text-slate-300 hover:border-white/20"
+            }`}
+          >
+            <p className="text-xs uppercase tracking-[0.2em]">Choose Input</p>
+            <p className="mt-1 text-sm font-medium">🤖 Use AI Voice Sample</p>
+          </button>
+        </div>
+
+        <div className="mb-5 grid gap-2">
+          <label className="text-xs uppercase tracking-[0.22em] text-slate-500">Voice intelligence preset</label>
+          <select
+            value={selectedStylePreset}
+            onChange={(e) => setSelectedStylePreset(e.target.value as VoiceStylePreset)}
+            className="rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-sm text-slate-200 outline-none transition focus:border-sky-400/50"
+          >
+            <option value="sales">Sales Call Voice</option>
+            <option value="support">Customer Support Voice</option>
+            <option value="podcast">Podcast Voice</option>
+          </select>
+        </div>
+
+        {inputMode === "sample" && (
+          <div className="mb-5 grid gap-2">
+            <label className="text-xs uppercase tracking-[0.22em] text-slate-500">AI sample source</label>
+            <select
+              value={selectedSampleId}
+              onChange={(e) => {
+                setSelectedSampleId(e.target.value);
+                setError("");
+              }}
+              className="rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-sm text-slate-200 outline-none transition focus:border-fuchsia-400/50"
+            >
+              {aiVoiceSamples.map((sample) => (
+                <option key={sample.id} value={sample.id}>
+                  {sample.label}
+                </option>
+              ))}
+            </select>
+            <p className="text-xs text-slate-500">{selectedSample.description}</p>
+          </div>
+        )}
 
         {error && (
           <div className="mb-4 rounded-lg border border-red-400/30 bg-red-500/10 p-3">
@@ -425,81 +542,93 @@ export function RecordingStudio({
           </div>
         )}
 
-        <div className="mb-4 grid gap-2">
-          <label className="text-xs uppercase tracking-[0.22em] text-slate-500">Microphone</label>
-          <select
-            value={selectedMicrophoneId}
-            onChange={(e) => setSelectedMicrophoneId(e.target.value)}
-            className="rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-sm text-slate-200 outline-none transition focus:border-sky-400/50"
-          >
-            <option value="default">Default Microphone</option>
-            {microphones.map((mic, i) => (
-              <option key={mic.deviceId || `mic-${i}`} value={mic.deviceId}>
-                {mic.label || `Microphone ${i + 1}`}
-              </option>
-            ))}
-          </select>
-          <p className="text-xs text-slate-500">
-            {microphones.length > 0 ? `${microphones.length} input device${microphones.length > 1 ? "s" : ""} detected` : "No microphone detected"}
-          </p>
-        </div>
-
-        <div className="flex flex-wrap gap-3">
-          {!isRecording && !hasRecording && (
-            <button
-              onClick={startRecording}
-              disabled={isCheckingDevices || microphones.length === 0}
-              className="flex items-center gap-2 rounded-lg border border-emerald-400/40 bg-emerald-500/15 px-4 py-2 text-sm font-medium text-emerald-300 transition hover:border-emerald-400/60 hover:bg-emerald-500/25"
-            >
-              <span className="relative flex h-3 w-3">
-                <span className="absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75 animate-pulse" />
-                <span className="relative inline-flex h-3 w-3 rounded-full bg-emerald-400" />
-              </span>
-                {isCheckingDevices ? "Checking devices..." : "Record"}
-            </button>
-          )}
-
-          {isRecording && (
-            <>
-              <div className="flex items-center gap-2 rounded-lg border border-sky-400/30 bg-sky-500/10 px-4 py-2">
-                <div className="flex gap-1">
-                  {[0, 1, 2].map((i) => (
-                    <motion.div
-                      key={i}
-                      className="h-3 w-1 rounded-full bg-sky-400"
-                      animate={{ scaleY: [0.4, 1, 0.4] }}
-                      transition={{ duration: 0.8, delay: i * 0.2, repeat: Infinity }}
-                    />
-                  ))}
-                </div>
-                <span className="text-xs font-mono text-sky-300">{formatTime(recordingTime)}</span>
-              </div>
-              <button
-                onClick={stopRecording}
-                className="rounded-lg border border-slate-500/30 bg-slate-500/10 px-4 py-2 text-sm font-medium text-slate-300 transition hover:border-slate-400/40 hover:bg-slate-500/20"
+        {inputMode === "record" ? (
+          <>
+            <div className="mb-4 grid gap-2">
+              <label className="text-xs uppercase tracking-[0.22em] text-slate-500">Microphone</label>
+              <select
+                value={selectedMicrophoneId}
+                onChange={(e) => setSelectedMicrophoneId(e.target.value)}
+                className="rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-sm text-slate-200 outline-none transition focus:border-sky-400/50"
               >
-                Stop
-              </button>
-            </>
-          )}
+                <option value="default">Default Microphone</option>
+                {microphones.map((mic, i) => (
+                  <option key={mic.deviceId || `mic-${i}`} value={mic.deviceId}>
+                    {mic.label || `Microphone ${i + 1}`}
+                  </option>
+                ))}
+              </select>
+              <p className="text-xs text-slate-500">
+                {microphones.length > 0
+                  ? `${microphones.length} input device${microphones.length > 1 ? "s" : ""} detected`
+                  : "No microphone detected"}
+              </p>
+            </div>
 
-          {hasRecording && (
-            <>
-              <button
-                onClick={clearRecording}
-                className="rounded-lg border border-slate-500/30 bg-slate-500/10 px-4 py-2 text-sm font-medium text-slate-300 transition hover:border-slate-400/40 hover:bg-slate-500/20"
-              >
-                Clear
-              </button>
-              <button
-                onClick={startRecording}
-                className="rounded-lg border border-slate-500/30 bg-slate-500/10 px-4 py-2 text-sm font-medium text-slate-300 transition hover:border-slate-400/40 hover:bg-slate-500/20"
-              >
-                Re-record
-              </button>
-            </>
-          )}
-        </div>
+            <div className="flex flex-wrap gap-3">
+              {!isRecording && !hasRecording && (
+                <button
+                  onClick={startRecording}
+                  disabled={isCheckingDevices || microphones.length === 0}
+                  className="flex items-center gap-2 rounded-lg border border-emerald-400/40 bg-emerald-500/15 px-4 py-2 text-sm font-medium text-emerald-300 transition hover:border-emerald-400/60 hover:bg-emerald-500/25"
+                >
+                  <span className="relative flex h-3 w-3">
+                    <span className="absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75 animate-pulse" />
+                    <span className="relative inline-flex h-3 w-3 rounded-full bg-emerald-400" />
+                  </span>
+                  {isCheckingDevices ? "Checking devices..." : "Record"}
+                </button>
+              )}
+
+              {isRecording && (
+                <>
+                  <div className="flex items-center gap-2 rounded-lg border border-sky-400/30 bg-sky-500/10 px-4 py-2">
+                    <div className="flex gap-1">
+                      {[0, 1, 2].map((i) => (
+                        <motion.div
+                          key={i}
+                          className="h-3 w-1 rounded-full bg-sky-400"
+                          animate={{ scaleY: [0.4, 1, 0.4] }}
+                          transition={{ duration: 0.8, delay: i * 0.2, repeat: Infinity }}
+                        />
+                      ))}
+                    </div>
+                    <span className="text-xs font-mono text-sky-300">{formatTime(recordingTime)}</span>
+                  </div>
+                  <button
+                    onClick={stopRecording}
+                    className="rounded-lg border border-slate-500/30 bg-slate-500/10 px-4 py-2 text-sm font-medium text-slate-300 transition hover:border-slate-400/40 hover:bg-slate-500/20"
+                  >
+                    Stop
+                  </button>
+                </>
+              )}
+
+              {hasRecording && (
+                <>
+                  <button
+                    onClick={clearRecording}
+                    className="rounded-lg border border-slate-500/30 bg-slate-500/10 px-4 py-2 text-sm font-medium text-slate-300 transition hover:border-slate-400/40 hover:bg-slate-500/20"
+                  >
+                    Clear
+                  </button>
+                  <button
+                    onClick={startRecording}
+                    className="rounded-lg border border-slate-500/30 bg-slate-500/10 px-4 py-2 text-sm font-medium text-slate-300 transition hover:border-slate-400/40 hover:bg-slate-500/20"
+                  >
+                    Re-record
+                  </button>
+                </>
+              )}
+            </div>
+          </>
+        ) : (
+          <div className="rounded-lg border border-fuchsia-400/20 bg-fuchsia-500/[0.06] p-4">
+            <p className="text-xs text-fuchsia-200">
+              AI sample mode selected. Use Generate below to run the same Ghost pipeline on the selected robotic voice.
+            </p>
+          </div>
+        )}
       </div>
 
       {/* Before: user recording */}
@@ -508,12 +637,12 @@ export function RecordingStudio({
           <p className="text-xs uppercase tracking-[0.28em] text-slate-500">Step 2</p>
           <p className="mt-2 text-sm font-medium text-rose-300">❌ Standard Voice Output</p>
           <div className="relative mt-4 overflow-hidden rounded-lg border border-white/6 bg-black/30 p-4">
-            {hasRecording ? (
+            {(inputMode === "sample" || hasRecording) ? (
               <audio
                 className="w-full"
                 controls
                 preload="metadata"
-                src={recordedAudioUrl ?? undefined}
+                src={inputMode === "sample" ? selectedSample.src : (recordedAudioUrl ?? undefined)}
               />
             ) : (
               <div className="flex h-12 items-center justify-center">
@@ -530,12 +659,14 @@ export function RecordingStudio({
           <div className="relative mt-4 overflow-hidden rounded-lg border border-white/6 bg-black/30 p-4">
             {enhancedAudio ? (
               <audio className="w-full" controls preload="metadata">
-                <source src={enhancedAudio} type="audio/wav" />
+                <source src={enhancedAudio} type={enhancedMimeType} />
               </audio>
             ) : (
               <div className="flex h-12 items-center justify-center">
                 <p className="text-xs text-slate-500">
-                  {hasRecording ? "Click Generate below to process intelligence layer" : "No recording yet"}
+                  {(inputMode === "sample" || hasRecording)
+                    ? "Click Generate below to process intelligence layer"
+                    : "No recording yet"}
                 </p>
               </div>
             )}
@@ -544,7 +675,7 @@ export function RecordingStudio({
       </div>
 
       {/* Generate button */}
-      {hasRecording && !enhancedAudio && (
+      {(inputMode === "sample" || hasRecording) && !enhancedAudio && (
         <button
           onClick={enhanceAudio}
           disabled={isEnhancing}

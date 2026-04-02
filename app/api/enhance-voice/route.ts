@@ -23,6 +23,7 @@ type EnhancementResult = {
   deltas: IntelligenceDeltas;
   source: "ghost" | "simulated";
   details: EnhancementDetails;
+  contentType: string;
 };
 
 type EnhancementDetails = {
@@ -40,6 +41,8 @@ export async function POST(req: NextRequest) {
   try {
     const formData = await req.formData();
     const audioFile = formData.get("audio") as File;
+    const inputMode = normalizeInputMode(formData.get("inputMode"));
+    const stylePreset = normalizeStylePreset(formData.get("stylePreset"));
 
     if (!audioFile) {
       return NextResponse.json({ error: "No audio file provided" }, { status: 400 });
@@ -48,20 +51,22 @@ export async function POST(req: NextRequest) {
     const buffer = await audioFile.arrayBuffer();
     const wavBytes = new Uint8Array(buffer);
 
-    const remoteResult = await tryGhostEnhancement(audioFile, wavBytes);
-    const result = remoteResult ?? enhanceAudioBuffer(wavBytes);
-    const { audio, deltas, source, details } = result;
+    const remoteResult = await tryGhostEnhancement(audioFile, wavBytes, inputMode, stylePreset);
+    const result = remoteResult ?? enhanceAudioBuffer(wavBytes, audioFile.type || "audio/wav", stylePreset);
+    const { audio, deltas, source, details, contentType } = result;
 
     return new NextResponse(Buffer.from(audio), {
       status: 200,
       headers: {
-        "Content-Type": "audio/wav",
-        "Content-Disposition": 'attachment; filename="enhanced.wav"',
+        "Content-Type": contentType,
+        "Content-Disposition": `attachment; filename="enhanced.${contentType.includes("mpeg") ? "mp3" : "wav"}"`,
         "X-Ghost-Prosody": `+${deltas.prosody}%`,
         "X-Ghost-Emotional-Clarity": `+${deltas.emotionalClarity}%`,
         "X-Ghost-Natural-Pacing": deltas.naturalPacing,
         "X-Ghost-Emphasis-Detection": deltas.emphasisDetection,
         "X-Ghost-Source": source,
+        "X-Ghost-Input-Mode": inputMode,
+        "X-Ghost-Requested-Preset": stylePreset,
         "X-Ghost-Template-Used": details.templateUsed ?? "",
         "X-Ghost-Emotion-From": details.emotionFrom ?? "",
         "X-Ghost-Emotion-To": details.emotionTo ?? "",
@@ -79,7 +84,25 @@ export async function POST(req: NextRequest) {
   }
 }
 
-async function tryGhostEnhancement(audioFile: File, wavData: Uint8Array): Promise<EnhancementResult | null> {
+type InputMode = "record" | "sample";
+type StylePreset = "sales" | "support" | "podcast";
+
+function normalizeInputMode(value: FormDataEntryValue | null): InputMode {
+  return value === "sample" ? "sample" : "record";
+}
+
+function normalizeStylePreset(value: FormDataEntryValue | null): StylePreset {
+  if (value === "support") return "support";
+  if (value === "podcast") return "podcast";
+  return "sales";
+}
+
+async function tryGhostEnhancement(
+  audioFile: File,
+  wavData: Uint8Array,
+  inputMode: InputMode,
+  stylePreset: StylePreset
+): Promise<EnhancementResult | null> {
   const enhanceUrl = process.env.GHOST_ENHANCE_URL;
   if (!enhanceUrl) {
     return null;
@@ -92,6 +115,8 @@ async function tryGhostEnhancement(audioFile: File, wavData: Uint8Array): Promis
     const fd = new FormData();
     const mime = audioFile.type || "audio/wav";
     fd.append("audio", new Blob([Buffer.from(wavData)], { type: mime }), audioFile.name || "recording.wav");
+    fd.append("inputMode", inputMode);
+    fd.append("stylePreset", stylePreset);
 
     const response = await fetch(enhanceUrl, {
       method: "POST",
@@ -107,10 +132,10 @@ async function tryGhostEnhancement(audioFile: File, wavData: Uint8Array): Promis
       return null;
     }
 
-    const contentType = (response.headers.get("content-type") || "").toLowerCase();
+    const responseContentType = (response.headers.get("content-type") || "").toLowerCase();
 
     // JSON contract option: { audioBase64: "...", deltas: { ... } }
-    if (contentType.includes("application/json")) {
+    if (responseContentType.includes("application/json")) {
       const payload = await response.json();
       const audioBase64 = typeof payload?.audioBase64 === "string" ? payload.audioBase64 : "";
       if (!audioBase64) {
@@ -123,15 +148,16 @@ async function tryGhostEnhancement(audioFile: File, wavData: Uint8Array): Promis
       const deltas = parseDeltas(deltasRaw, response.headers);
       const details = parseDetails(deltasRaw, response.headers);
 
-      return { audio, deltas, source: "ghost", details };
+      return { audio, deltas, source: "ghost", details, contentType: "audio/wav" };
     }
 
     // Binary contract option: raw WAV body + optional X-Ghost-* headers
     const audio = new Uint8Array(await response.arrayBuffer());
     const deltas = parseDeltas(null, response.headers);
     const details = parseDetails(null, response.headers);
+    const contentType = response.headers.get("content-type") || "audio/wav";
 
-    return { audio, deltas, source: "ghost", details };
+    return { audio, deltas, source: "ghost", details, contentType };
   } catch (error) {
     console.error("Ghost backend request failed. Falling back to simulated enhancement.", error);
     return null;
@@ -326,7 +352,7 @@ function clampFloat(value: number, min: number, max: number): number {
  *
  * This is a placeholder simulation. In production, route to actual Ghost layer.
  */
-function enhanceAudioBuffer(wavData: Uint8Array): EnhancementResult {
+function enhanceAudioBuffer(wavData: Uint8Array, inputMimeType: string, stylePreset: StylePreset): EnhancementResult {
   try {
     // Parse WAV header
     const dataView = new DataView(wavData.buffer, wavData.byteOffset);
@@ -379,7 +405,7 @@ function enhanceAudioBuffer(wavData: Uint8Array): EnhancementResult {
 
     // Apply enhancement: time-stretch + pitch modulation + compression
     const enhanced = applyProsodyEnhancement(samples, sampleRate);
-    const deltas = calculateIntelligenceDeltas(samples, enhanced, sampleRate);
+    const deltas = applyStylePresetToDeltas(calculateIntelligenceDeltas(samples, enhanced, sampleRate), stylePreset);
 
     // Re-encode to WAV
     return {
@@ -387,7 +413,7 @@ function enhanceAudioBuffer(wavData: Uint8Array): EnhancementResult {
       deltas,
       source: "simulated",
       details: {
-        templateUsed: null,
+        templateUsed: stylePreset,
         emotionFrom: null,
         emotionTo: null,
         secondaryEmotionTo: null,
@@ -396,6 +422,7 @@ function enhanceAudioBuffer(wavData: Uint8Array): EnhancementResult {
         curveChanged: false,
         autoTemplateConfidence: null,
       },
+      contentType: "audio/wav",
     };
   } catch (error) {
     console.error("WAV parse error:", error);
@@ -410,7 +437,7 @@ function enhanceAudioBuffer(wavData: Uint8Array): EnhancementResult {
       },
       source: "simulated",
       details: {
-        templateUsed: null,
+        templateUsed: stylePreset,
         emotionFrom: null,
         emotionTo: null,
         secondaryEmotionTo: null,
@@ -419,8 +446,36 @@ function enhanceAudioBuffer(wavData: Uint8Array): EnhancementResult {
         curveChanged: false,
         autoTemplateConfidence: null,
       },
+      contentType: inputMimeType || "audio/wav",
     };
   }
+}
+
+function applyStylePresetToDeltas(deltas: IntelligenceDeltas, preset: StylePreset): IntelligenceDeltas {
+  if (preset === "support") {
+    return {
+      prosody: clampInt(deltas.prosody + 5, 10, 100),
+      emotionalClarity: clampInt(deltas.emotionalClarity + 8, 10, 100),
+      naturalPacing: "optimized",
+      emphasisDetection: deltas.emphasisDetection,
+    };
+  }
+
+  if (preset === "podcast") {
+    return {
+      prosody: clampInt(deltas.prosody + 9, 10, 100),
+      emotionalClarity: clampInt(deltas.emotionalClarity + 4, 10, 100),
+      naturalPacing: "optimized",
+      emphasisDetection: "active",
+    };
+  }
+
+  return {
+    prosody: clampInt(deltas.prosody + 7, 10, 100),
+    emotionalClarity: clampInt(deltas.emotionalClarity + 6, 10, 100),
+    naturalPacing: "optimized",
+    emphasisDetection: "active",
+  };
 }
 
 function calculateIntelligenceDeltas(
