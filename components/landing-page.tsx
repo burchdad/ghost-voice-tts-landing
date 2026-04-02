@@ -58,6 +58,14 @@ const useCases = [
   },
 ];
 
+const audience = ["AI builders", "Voice agent teams", "AI SaaS platforms", "Enterprise conversational systems"];
+
+const proofMetrics = [
+  { label: "Intent clarity", before: "61%", after: "92%" },
+  { label: "Conversation completion", before: "48%", after: "79%" },
+  { label: "Perceived naturalness", before: "2.3/5", after: "4.4/5" },
+];
+
 const pricing = [
   {
     name: "Starter",
@@ -449,10 +457,13 @@ export function LandingPage() {
       <Section
         eyebrow="Problem"
         title="AI Still Doesn’t Sound Human"
-        copy="Most voice systems still optimize for text rendering, not expressive delivery. The result is robotic speech that breaks immersion and erodes trust in live interactions."
+        copy="Most AI voices fail for one reason: they generate speech but do not control prosody. Ghost fixes that layer."
       >
         <div className="grid gap-8 lg:grid-cols-[0.95fr_1.05fr]">
           <div className="panel p-6 sm:p-8">
+            <div className="mb-4 rounded-2xl border border-rose-300/20 bg-rose-300/10 px-4 py-4 text-sm font-medium text-rose-100">
+              "Most AI voices fail because they do not control prosody. We do."
+            </div>
             <div className="grid gap-4 text-sm text-slate-300 sm:grid-cols-2">
               {[
                 "Flat, robotic delivery",
@@ -470,6 +481,20 @@ export function LandingPage() {
             <Waveform />
             <Waveform expressive />
           </div>
+        </div>
+      </Section>
+
+      <Section
+        eyebrow="Who It Is For"
+        title="Built for teams shipping real AI voice products"
+        copy="Not for hobby demos. Ghost is for AI builders who need conversion-grade, production-safe, controllable voice behavior."
+      >
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          {audience.map((item) => (
+            <div key={item} className="panel rounded-2xl px-5 py-5 text-sm font-medium text-slate-100">
+              {item}
+            </div>
+          ))}
         </div>
       </Section>
 
@@ -616,20 +641,52 @@ export function LandingPage() {
 
       <Section
         eyebrow="Demo"
-        title="Hear the shift from robotic output to controlled expression"
-        copy="Use the same content, then route delivery through the Ghost Voice Intelligence layer to shape timing, emphasis, energy, and emotional contour."
+        title="Proof: Same script, radically different delivery"
+        copy="Hearing is believing. Compare baseline delivery against Ghost-controlled output and inspect measurable behavior lift."
       >
-        <div className="grid gap-5 lg:grid-cols-2">
-          <Waveform />
-          <Waveform expressive />
+        <div className="grid gap-5 xl:grid-cols-[1.1fr_0.9fr]">
+          <div className="grid gap-5 lg:grid-cols-2">
+            <div className="panel p-6">
+              <p className="text-xs uppercase tracking-[0.28em] text-slate-500">Before: baseline TTS</p>
+              <Waveform />
+              <audio className="mt-4 w-full" controls preload="metadata">
+                <source src="/audio/before-robotic.wav" type="audio/wav" />
+              </audio>
+            </div>
+            <div className="panel p-6">
+              <p className="text-xs uppercase tracking-[0.28em] text-slate-500">After: Ghost controlled</p>
+              <Waveform expressive />
+              <audio className="mt-4 w-full" controls preload="metadata">
+                <source src="/audio/after-expressive.wav" type="audio/wav" />
+              </audio>
+            </div>
+          </div>
+          <div className="panel p-6 sm:p-8">
+            <p className="text-xs uppercase tracking-[0.28em] text-slate-500">Observed outcome lift</p>
+            <div className="mt-5 space-y-4">
+              {proofMetrics.map((metric) => (
+                <div key={metric.label} className="rounded-2xl border border-white/8 bg-white/[0.03] px-4 py-4">
+                  <p className="text-sm text-slate-300">{metric.label}</p>
+                  <div className="mt-3 flex items-center gap-3 text-sm">
+                    <span className="rounded-full border border-slate-500/30 bg-slate-500/10 px-3 py-1 text-slate-300">Before {metric.before}</span>
+                    <span className="text-sky-300">→</span>
+                    <span className="rounded-full border border-emerald-400/30 bg-emerald-400/10 px-3 py-1 text-emerald-300">After {metric.after}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <p className="mt-5 text-xs leading-6 text-slate-400">
+              Demo clips are illustrative A/B samples of controlled contouring and expressive pacing.
+            </p>
+          </div>
         </div>
       </Section>
 
       <Section
         id="pricing"
         eyebrow="Pricing"
-        title="Simple entry points for fast deployment"
-        copy="Usage-based scaling available."
+        title="Usage-aware plans for production voice infrastructure"
+        copy="Start quickly, then scale by traffic, session load, and orchestration complexity."
       >
         <div className="grid gap-5 lg:grid-cols-3">
           {pricing.map((tier) => (
@@ -642,8 +699,8 @@ export function LandingPage() {
               <p className="text-sm uppercase tracking-[0.24em] text-slate-400">{tier.name}</p>
               <p className="mt-4 text-4xl font-semibold text-white">{tier.price}</p>
               <p className="mt-4 text-sm leading-7 text-slate-300">{tier.description}</p>
-              <a href="#final-cta" className="button-secondary mt-8 w-full">
-                {tier.name === "Enterprise" ? "Talk to Sales" : "Get Started"}
+              <a href={demoLink} className="button-secondary mt-8 w-full">
+                {tier.name === "Enterprise" ? "Contact Sales" : "Start Pilot"}
               </a>
             </motion.div>
           ))}
