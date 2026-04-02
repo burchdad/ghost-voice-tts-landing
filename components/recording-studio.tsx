@@ -19,12 +19,14 @@ export function RecordingStudio({
   const [recordingTime, setRecordingTime] = useState(0);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
 
-  const intelligenceDeltas = [
-    "Prosody: +42%",
-    "Emotional clarity: +67%",
-    "Natural pacing: optimized",
-    "Emphasis detection: active",
-  ];
+  const defaultDeltas = {
+    prosody: "+42%",
+    emotionalClarity: "+67%",
+    naturalPacing: "optimized",
+    emphasisDetection: "active",
+  };
+
+  const [intelligenceDeltas, setIntelligenceDeltas] = useState(defaultDeltas);
 
   // Start recording
   const startRecording = async () => {
@@ -94,6 +96,7 @@ export function RecordingStudio({
     chunksRef.current = [];
     setHasRecording(false);
     setEnhancedAudio(null);
+    setIntelligenceDeltas(defaultDeltas);
     setRecordingTime(0);
     if (audioRef.current) audioRef.current.src = "";
     setError("");
@@ -128,6 +131,22 @@ export function RecordingStudio({
       });
 
       if (!enhanceRes.ok) throw new Error("Enhancement failed");
+
+      const prosody = enhanceRes.headers.get("X-Ghost-Prosody") ?? defaultDeltas.prosody;
+      const emotionalClarity =
+        enhanceRes.headers.get("X-Ghost-Emotional-Clarity") ?? defaultDeltas.emotionalClarity;
+      const naturalPacing =
+        enhanceRes.headers.get("X-Ghost-Natural-Pacing") ?? defaultDeltas.naturalPacing;
+      const emphasisDetection =
+        enhanceRes.headers.get("X-Ghost-Emphasis-Detection") ?? defaultDeltas.emphasisDetection;
+
+      setIntelligenceDeltas({
+        prosody,
+        emotionalClarity,
+        naturalPacing,
+        emphasisDetection,
+      });
+
       const enhanced = await enhanceRes.arrayBuffer();
       const enhancedUrl = URL.createObjectURL(new Blob([enhanced], { type: "audio/wav" }));
       setEnhancedAudio(enhancedUrl);
@@ -301,11 +320,18 @@ export function RecordingStudio({
           <p className="text-xs uppercase tracking-[0.28em] text-slate-500">Step 4</p>
           <p className="mt-2 text-sm font-medium text-white">What changed in the output</p>
           <div className="mt-4 grid gap-3 sm:grid-cols-2">
-            {intelligenceDeltas.map((delta) => (
-              <div key={delta} className="rounded-xl border border-white/10 bg-black/20 px-3 py-3 text-sm text-emerald-200">
-                ↑ {delta}
-              </div>
-            ))}
+            <div className="rounded-xl border border-white/10 bg-black/20 px-3 py-3 text-sm text-emerald-200">
+              ↑ Prosody: {intelligenceDeltas.prosody}
+            </div>
+            <div className="rounded-xl border border-white/10 bg-black/20 px-3 py-3 text-sm text-emerald-200">
+              ↑ Emotional clarity: {intelligenceDeltas.emotionalClarity}
+            </div>
+            <div className="rounded-xl border border-white/10 bg-black/20 px-3 py-3 text-sm text-emerald-200">
+              ↑ Natural pacing: {intelligenceDeltas.naturalPacing}
+            </div>
+            <div className="rounded-xl border border-white/10 bg-black/20 px-3 py-3 text-sm text-emerald-200">
+              ↑ Emphasis detection: {intelligenceDeltas.emphasisDetection}
+            </div>
           </div>
           <p className="mt-4 text-xs leading-6 text-slate-400">
             Initial uplift values are simulated for demo clarity; wire this panel to live model telemetry as Ghost evaluation endpoints are finalized.
