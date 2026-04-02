@@ -806,6 +806,19 @@ export function LandingPage() {
             )}
           </p>
         </div>
+
+        <div className="mt-5 rounded-2xl border border-emerald-300/20 bg-emerald-500/[0.05] p-5">
+          <p className="text-sm font-medium text-emerald-200">
+            Processed using live Ghost Voice Intelligence engine
+          </p>
+        </div>
+
+        <div className="mt-5 panel p-6 text-center sm:p-8">
+          <p className="text-lg font-medium text-white">Want this in your AI system?</p>
+          <a href={demoLink} className="button-primary mt-5 inline-flex">
+            Book a Demo
+          </a>
+        </div>
       </Section>
 
       <Section
