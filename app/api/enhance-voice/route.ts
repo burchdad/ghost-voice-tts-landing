@@ -393,13 +393,13 @@ function getTransformProfile(
 ): TransformProfile {
   if (intensity === "extreme") {
     return {
-      speedBase: 1.12,
-      speedSwing: 0.14,
+      speedBase: 1.15,
+      speedSwing: 0.18,
       emphasisBoost: 1.8,
-      compressorThreshold: 0.42,
-      compressorRatio: 6.5,
-      makeupGain: 1.65,
-      pitchShift: 1.15,
+      compressorThreshold: 0.38,
+      compressorRatio: 7.2,
+      makeupGain: 1.9,
+      pitchShift: 1.18,
     };
   }
 
