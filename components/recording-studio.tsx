@@ -334,7 +334,7 @@ export function RecordingStudio({
             </div>
           </div>
           <p className="mt-4 text-xs leading-6 text-slate-400">
-            Initial uplift values are simulated for demo clarity; wire this panel to live model telemetry as Ghost evaluation endpoints are finalized.
+            Uplift values are computed per recording. With a configured Ghost backend, values come from model output telemetry; otherwise they fall back to local simulated analysis for demo continuity.
           </p>
         </div>
       )}

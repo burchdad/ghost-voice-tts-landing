@@ -18,6 +18,12 @@ type IntelligenceDeltas = {
   emphasisDetection: "active" | "warming";
 };
 
+type EnhancementResult = {
+  audio: Uint8Array;
+  deltas: IntelligenceDeltas;
+  source: "ghost" | "simulated";
+};
+
 export async function POST(req: NextRequest) {
   try {
     const formData = await req.formData();
@@ -28,7 +34,11 @@ export async function POST(req: NextRequest) {
     }
 
     const buffer = await audioFile.arrayBuffer();
-    const { audio, deltas } = enhanceAudioBuffer(new Uint8Array(buffer));
+    const wavBytes = new Uint8Array(buffer);
+
+    const remoteResult = await tryGhostEnhancement(audioFile, wavBytes);
+    const result = remoteResult ?? enhanceAudioBuffer(wavBytes);
+    const { audio, deltas, source } = result;
 
     return new NextResponse(Buffer.from(audio), {
       status: 200,
@@ -39,12 +49,115 @@ export async function POST(req: NextRequest) {
         "X-Ghost-Emotional-Clarity": `+${deltas.emotionalClarity}%`,
         "X-Ghost-Natural-Pacing": deltas.naturalPacing,
         "X-Ghost-Emphasis-Detection": deltas.emphasisDetection,
+        "X-Ghost-Source": source,
       },
     });
   } catch (error) {
     console.error("Enhancement error:", error);
     return NextResponse.json({ error: "Enhancement failed" }, { status: 500 });
   }
+}
+
+async function tryGhostEnhancement(audioFile: File, wavData: Uint8Array): Promise<EnhancementResult | null> {
+  const enhanceUrl = process.env.GHOST_ENHANCE_URL;
+  if (!enhanceUrl) {
+    return null;
+  }
+
+  const timeoutMs = Number(process.env.GHOST_ENHANCE_TIMEOUT_MS ?? "15000");
+  const apiKey = process.env.GHOST_ENHANCE_API_KEY;
+
+  try {
+    const fd = new FormData();
+    const mime = audioFile.type || "audio/wav";
+    fd.append("audio", new Blob([Buffer.from(wavData)], { type: mime }), audioFile.name || "recording.wav");
+
+    const response = await fetch(enhanceUrl, {
+      method: "POST",
+      headers: {
+        ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
+      },
+      body: fd,
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+
+    if (!response.ok) {
+      console.error("Ghost backend error:", response.status, await response.text());
+      return null;
+    }
+
+    const contentType = (response.headers.get("content-type") || "").toLowerCase();
+
+    // JSON contract option: { audioBase64: "...", deltas: { ... } }
+    if (contentType.includes("application/json")) {
+      const payload = await response.json();
+      const audioBase64 = typeof payload?.audioBase64 === "string" ? payload.audioBase64 : "";
+      if (!audioBase64) {
+        console.error("Ghost backend JSON response missing audioBase64.");
+        return null;
+      }
+
+      const audio = new Uint8Array(Buffer.from(audioBase64, "base64"));
+      const deltas = parseDeltas(payload?.deltas, response.headers);
+
+      return { audio, deltas, source: "ghost" };
+    }
+
+    // Binary contract option: raw WAV body + optional X-Ghost-* headers
+    const audio = new Uint8Array(await response.arrayBuffer());
+    const deltas = parseDeltas(null, response.headers);
+
+    return { audio, deltas, source: "ghost" };
+  } catch (error) {
+    console.error("Ghost backend request failed. Falling back to simulated enhancement.", error);
+    return null;
+  }
+}
+
+function parseDeltas(raw: unknown, headers: Headers): IntelligenceDeltas {
+  const fromObject = typeof raw === "object" && raw !== null ? (raw as Record<string, unknown>) : {};
+
+  return {
+    prosody: clampInt(
+      parsePercent(fromObject.prosody, parsePercent(headers.get("X-Ghost-Prosody"), 42)),
+      10,
+      100
+    ),
+    emotionalClarity: clampInt(
+      parsePercent(
+        fromObject.emotionalClarity,
+        parsePercent(headers.get("X-Ghost-Emotional-Clarity"), 67)
+      ),
+      10,
+      100
+    ),
+    naturalPacing:
+      normalizeEnum(fromObject.naturalPacing, headers.get("X-Ghost-Natural-Pacing")) === "optimized"
+        ? "optimized"
+        : "adjusting",
+    emphasisDetection:
+      normalizeEnum(fromObject.emphasisDetection, headers.get("X-Ghost-Emphasis-Detection")) === "active"
+        ? "active"
+        : "warming",
+  };
+}
+
+function normalizeEnum(primary: unknown, fallback: string | null): string {
+  if (typeof primary === "string") return primary.toLowerCase();
+  return (fallback || "").toLowerCase();
+}
+
+function parsePercent(value: unknown, fallback: number): number {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return Math.round(value);
+  }
+  if (typeof value === "string") {
+    const match = value.match(/-?\d+/);
+    if (match) {
+      return Math.round(Number(match[0]));
+    }
+  }
+  return fallback;
 }
 
 /**
@@ -60,7 +173,7 @@ export async function POST(req: NextRequest) {
  *
  * This is a placeholder simulation. In production, route to actual Ghost layer.
  */
-function enhanceAudioBuffer(wavData: Uint8Array): { audio: Uint8Array; deltas: IntelligenceDeltas } {
+function enhanceAudioBuffer(wavData: Uint8Array): EnhancementResult {
   try {
     // Parse WAV header
     const dataView = new DataView(wavData.buffer, wavData.byteOffset);
@@ -119,6 +232,7 @@ function enhanceAudioBuffer(wavData: Uint8Array): { audio: Uint8Array; deltas: I
     return {
       audio: encodeWav(enhanced, sampleRate, numChannels, bitsPerSample),
       deltas,
+      source: "simulated",
     };
   } catch (error) {
     console.error("WAV parse error:", error);
@@ -131,6 +245,7 @@ function enhanceAudioBuffer(wavData: Uint8Array): { audio: Uint8Array; deltas: I
         naturalPacing: "adjusting",
         emphasisDetection: "warming",
       },
+      source: "simulated",
     };
   }
 }
