@@ -134,6 +134,12 @@ const docsLink = "/docs";
 const apiLink = "/api-reference";
 const beforeWave = [14, 20, 22, 18, 24, 16, 20, 22, 18, 24, 16, 22, 18, 20, 24, 16];
 const afterWave = [18, 46, 24, 68, 40, 82, 28, 58, 30, 92, 44, 70, 24, 60, 38, 76];
+const heroDemo = {
+  beforeAudio: "/audio/sales-before.wav",
+  afterAudio: "/audio/sales-after.wav",
+  transcript:
+    "I noticed your team recently expanded into enterprise accounts. I wanted to reach out because Ghost helps AI agents sound less robotic and get more replies.",
+};
 
 function Section({
   id,
@@ -386,7 +392,21 @@ function ContactModal({
 export function LandingPage() {
   const [isContactOpen, setIsContactOpen] = useState(false);
   const [selectedDemo, setSelectedDemo] = useState(0);
-  const [isStudioMode, setIsStudioMode] = useState(false);
+  const [isStudioMode, setIsStudioMode] = useState(true);
+  const [heroDemoMode, setHeroDemoMode] = useState<"before" | "after">("before");
+  const [heroAutoToggle, setHeroAutoToggle] = useState(true);
+
+  useEffect(() => {
+    if (!heroAutoToggle) {
+      return;
+    }
+
+    const intervalId = setInterval(() => {
+      setHeroDemoMode((prev) => (prev === "before" ? "after" : "before"));
+    }, 2000);
+
+    return () => clearInterval(intervalId);
+  }, [heroAutoToggle]);
 
   return (
     <>
@@ -414,17 +434,17 @@ export function LandingPage() {
         </div>
       </header>
 
-      <section className="shell relative py-8 sm:py-12 lg:py-16">
-        <div className="panel noise relative overflow-hidden px-6 py-8 sm:px-10 sm:py-12 lg:px-14 lg:py-16">
+      <section className="shell relative py-8 sm:py-10 lg:py-12">
+        <div className="panel noise relative overflow-hidden px-6 py-8 sm:px-8 sm:py-10 lg:px-10 lg:py-12">
           <BackgroundScene />
-          <div className="relative z-10 grid gap-12 lg:grid-cols-[1.15fr_0.85fr] lg:items-end">
-            <div className="max-w-3xl">
-              <span className="eyebrow">Voice intelligence layer for AI systems</span>
+          <div className="relative z-10 grid gap-8 lg:grid-cols-[0.9fr_1.1fr] lg:items-center">
+            <div className="max-w-2xl">
+              <span className="eyebrow">Controlled hero demo</span>
               <motion.h1
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.65, ease: "easeOut" }}
-                className="mt-6 text-4xl font-semibold tracking-tight text-white sm:text-6xl lg:text-7xl"
+                className="mt-5 text-4xl font-semibold tracking-tight text-white sm:text-6xl lg:text-[4.5rem]"
               >
                 Your AI sounds robotic. We fix that.
               </motion.h1>
@@ -432,21 +452,29 @@ export function LandingPage() {
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.75, delay: 0.08, ease: "easeOut" }}
-                className="mt-6 max-w-2xl text-base leading-8 text-slate-300 sm:text-lg"
+                className="mt-4 max-w-xl text-base leading-7 text-slate-300 sm:text-lg"
               >
-                Upload any voice, watch it transform, and see proof in real time.
+                Hear the exact before and after first. Then try the real engine yourself below.
+              </motion.p>
+              <motion.p
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.8, delay: 0.12, ease: "easeOut" }}
+                className="mt-4 text-sm font-medium text-emerald-200"
+              >
+                Real audio transformation. Verified in real time.
               </motion.p>
               <motion.div
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.85, delay: 0.16, ease: "easeOut" }}
-                className="mt-8 flex flex-col gap-4 sm:flex-row"
+                className="mt-6 flex flex-col gap-3 sm:flex-row"
               >
                 <a href={demoLink} className="button-primary">
                   Book a Demo
                 </a>
-                <a href="#architecture" className="button-secondary">
-                  View Architecture
+                <a href="#capabilities" className="button-secondary">
+                  See How It Works
                 </a>
               </motion.div>
             </div>
@@ -455,29 +483,81 @@ export function LandingPage() {
               initial={{ opacity: 0, x: 30 }}
               animate={{ opacity: 1, x: 0 }}
               transition={{ duration: 0.8, delay: 0.1, ease: "easeOut" }}
-              className="panel relative ml-auto w-full max-w-xl p-5"
+              className="panel relative ml-auto w-full max-w-2xl p-6 sm:p-7"
             >
+              <audio preload="auto" src={heroDemo.beforeAudio} className="hidden" />
+              <audio preload="auto" src={heroDemo.afterAudio} className="hidden" />
               <div className="flex items-center justify-between border-b border-white/10 pb-4">
                 <div>
-                  <p className="text-xs uppercase tracking-[0.3em] text-slate-400">Live Orchestration</p>
-                  <p className="mt-2 text-lg font-medium text-white">Prosody decision plane</p>
+                  <p className="text-xs uppercase tracking-[0.3em] text-slate-400">Hero Demo</p>
+                  <p className="mt-2 text-xl font-medium text-white">Hear the difference instantly</p>
                 </div>
                 <div className="rounded-full border border-emerald-400/20 bg-emerald-400/10 px-3 py-1 text-xs text-emerald-300">
-                  active
+                  preloaded
                 </div>
               </div>
-              <div className="mt-5 space-y-4 text-sm text-slate-300">
-                <div className="flex items-center justify-between rounded-2xl border border-white/8 bg-white/[0.03] px-4 py-3">
-                  <span>Emotion blend</span>
-                  <span className="text-sky-300">confidence 0.92</span>
+              <div className="mt-5 rounded-2xl border border-white/8 bg-white/[0.03] p-5">
+                <p className="text-xs uppercase tracking-[0.24em] text-slate-500">Script</p>
+                <p className="mt-3 text-sm leading-7 text-slate-300 italic">&ldquo;{heroDemo.transcript}&rdquo;</p>
+              </div>
+              <div className="mt-5 flex flex-wrap gap-2">
+                <button
+                  onClick={() => {
+                    setHeroDemoMode("before");
+                    setHeroAutoToggle(false);
+                  }}
+                  className={`rounded-full border px-4 py-2 text-sm font-medium transition ${
+                    heroDemoMode === "before" && !heroAutoToggle
+                      ? "border-rose-300/40 bg-rose-400/15 text-rose-200"
+                      : "border-white/10 bg-white/[0.03] text-slate-300 hover:border-white/20"
+                  }`}
+                >
+                  ▶ Before (Standard AI)
+                </button>
+                <button
+                  onClick={() => {
+                    setHeroDemoMode("after");
+                    setHeroAutoToggle(false);
+                  }}
+                  className={`rounded-full border px-4 py-2 text-sm font-medium transition ${
+                    heroDemoMode === "after" && !heroAutoToggle
+                      ? "border-emerald-300/40 bg-emerald-400/15 text-emerald-200"
+                      : "border-white/10 bg-white/[0.03] text-slate-300 hover:border-white/20"
+                  }`}
+                >
+                  🔥 After (Ghost Enhanced)
+                </button>
+                <button
+                  onClick={() => setHeroAutoToggle((prev) => !prev)}
+                  className={`rounded-full border px-4 py-2 text-sm font-medium transition ${
+                    heroAutoToggle
+                      ? "border-sky-300/40 bg-sky-400/15 text-sky-200"
+                      : "border-white/10 bg-white/[0.03] text-slate-300 hover:border-white/20"
+                  }`}
+                >
+                  ↔ Toggle
+                </button>
+              </div>
+              <div className="mt-5 grid gap-4 xl:grid-cols-[1.1fr_0.9fr]">
+                <Waveform expressive={heroDemoMode === "after"} />
+                <div className="rounded-2xl border border-white/8 bg-black/30 p-5">
+                  <p className="text-xs uppercase tracking-[0.24em] text-slate-500">
+                    {heroDemoMode === "before" ? "Currently playing: Before" : "Currently playing: After"}
+                  </p>
+                  <audio className="mt-4 w-full" controls preload="metadata" src={heroDemoMode === "before" ? heroDemo.beforeAudio : heroDemo.afterAudio} />
+                  <p className="mt-4 text-base font-medium text-white">This is what your AI sounds like after Ghost.</p>
+                  <p className="mt-2 text-xs leading-6 text-slate-400">Real audio transformation. Verified in real time.</p>
+                  {heroAutoToggle ? (
+                    <p className="mt-2 text-[11px] text-sky-200">Auto-switching every 2 seconds</p>
+                  ) : null}
                 </div>
-                <div className="flex items-center justify-between rounded-2xl border border-white/8 bg-white/[0.03] px-4 py-3">
-                  <span>Provider routing</span>
-                  <span className="text-fuchsia-300">multi-region failover</span>
+              </div>
+              <div className="mt-5 grid gap-2 text-xs text-slate-300 sm:grid-cols-2">
+                <div className="rounded-2xl border border-emerald-300/20 bg-emerald-500/10 px-4 py-3 text-emerald-100">
+                  ✔ Standard AI to Ghost Enhanced
                 </div>
-                <div className="flex items-center justify-between rounded-2xl border border-white/8 bg-white/[0.03] px-4 py-3">
-                  <span>Session memory</span>
-                  <span className="text-cyan-300">Redis-backed</span>
+                <div className="rounded-2xl border border-emerald-300/20 bg-emerald-500/10 px-4 py-3 text-emerald-100">
+                  ✔ Preloaded for instant comparison
                 </div>
               </div>
             </motion.div>
@@ -678,9 +758,9 @@ export function LandingPage() {
       </Section>
 
       <Section
-        eyebrow="Demo"
-        title="Proof: Same script. Same voice. Different outcome."
-        copy="We do not simulate improvement. We prove it. The only variable below is whether Ghost Intelligence is in the loop."
+        eyebrow="Interactive Demo"
+        title="Try the real engine yourself"
+        copy="The hero above is a controlled sales demo. This section is the live interactive layer for deeper evaluation and hands-on testing."
       >
         {/* Use-case tab bar */}
         <div className="mb-8 flex flex-wrap gap-2">
